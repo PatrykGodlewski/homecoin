@@ -1,0 +1,13 @@
+.env
+.tools/
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
+/bin/
+/dist/

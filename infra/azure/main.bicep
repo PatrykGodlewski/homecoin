@@ -101,6 +101,16 @@ resource postgresFirewallAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewa
   }
 }
 
+// Required for migration 000001 (CREATE EXTENSION pgcrypto)
+resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2023-12-01-preview' = {
+  parent: postgres
+  name: 'azure.extensions'
+  properties: {
+    value: 'PGCRYPTO'
+    source: 'user-override'
+  }
+}
+
 output acrName string = acr.name
 output acrLoginServer string = acr.properties.loginServer
 output containerEnvName string = containerEnv.name

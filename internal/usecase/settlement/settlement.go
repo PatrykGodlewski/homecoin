@@ -8,6 +8,7 @@ import (
 	domainerrors "github.com/godlew/homecoin/internal/domain/errors"
 	"github.com/godlew/homecoin/internal/domain/entity"
 	"github.com/godlew/homecoin/internal/domain/repository"
+	"github.com/godlew/homecoin/internal/domain/service"
 	"github.com/godlew/homecoin/internal/usecase/householdguard"
 )
 
@@ -110,21 +111,21 @@ type UpdateStatusInput struct {
 type UpdateStatusUseCase struct {
 	settlements repository.SettlementRepository
 	households  repository.HouseholdRepository
-	outbox      repository.OutboxRepository
-	recalcCh    chan<- string
+	outbox        repository.OutboxRepository
+	recalcTrigger service.RecalcTrigger
 }
 
 func NewUpdateStatusUseCase(
 	settlements repository.SettlementRepository,
 	households repository.HouseholdRepository,
 	outbox repository.OutboxRepository,
-	recalcCh chan<- string,
+	recalcTrigger service.RecalcTrigger,
 ) *UpdateStatusUseCase {
 	return &UpdateStatusUseCase{
-		settlements: settlements,
-		households:  households,
-		outbox:      outbox,
-		recalcCh:    recalcCh,
+		settlements:   settlements,
+		households:    households,
+		outbox:        outbox,
+		recalcTrigger: recalcTrigger,
 	}
 }
 
@@ -162,10 +163,7 @@ func (uc *UpdateStatusUseCase) Execute(ctx context.Context, input UpdateStatusIn
 	})
 
 	if input.Status == "confirmed" {
-		select {
-		case uc.recalcCh <- input.HouseholdID:
-		default:
-		}
+		uc.recalcTrigger.Trigger(ctx, input.HouseholdID)
 	}
 
 	return nil

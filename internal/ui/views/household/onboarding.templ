@@ -1,0 +1,56 @@
+package household
+
+import (
+	"github.com/godlew/homecoin/internal/ui/views/components"
+	"github.com/godlew/homecoin/internal/ui/views/layouts"
+)
+
+templ OnboardingPage(errMsg string) {
+	@layouts.BaseLayout() {
+		<div class="auth-wrap">
+			<div class="auth-card" style="width: min(520px, 100%);">
+				<div class="logo">Welcome to <span>HomeCoin</span></div>
+				<p class="subtitle">Create a new household or join with an invite code</p>
+				if errMsg != "" {
+					<p class="error-msg">{ errMsg }</p>
+				}
+				<div class="grid grid-2" style="gap: 1.5rem;">
+					<div class="card">
+						<h3>Create household</h3>
+						<form method="post" action="/onboarding/create">
+							@components.FormGroup("Household name", "name") {
+								@components.TextField("name", "name", "text", true, "Our Home", "", "", "", "")
+							}
+							@components.FormGroup("Currency", "currency") {
+								@components.SelectField("currency", "currency", false, currencyOptions())
+							}
+							<div class="form-actions">
+								@components.Button("Create", components.ButtonPrimary, components.ButtonSizeDefault, true, true)
+							</div>
+						</form>
+					</div>
+					<div class="card">
+						<h3>Join household</h3>
+						<form method="post" action="/onboarding/join">
+							@components.FormGroup("Invite code", "invite_code") {
+								@components.TextField("invite_code", "invite_code", "text", true, "ABC123", "", "", "", "")
+							}
+							<div class="form-actions">
+								@components.Button("Join", components.ButtonSecondary, components.ButtonSizeDefault, true, true)
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+func currencyOptions() []components.SelectOption {
+	return []components.SelectOption{
+		{Value: "USD", Label: "USD", Selected: true},
+		{Value: "EUR", Label: "EUR"},
+		{Value: "GBP", Label: "GBP"},
+		{Value: "PLN", Label: "PLN"},
+	}
+}

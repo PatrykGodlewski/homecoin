@@ -1,6 +1,7 @@
 .env
 .tools/
 /bin/
+homecoin
 *.exe
 *.exe~
 *.dll
@@ -11,3 +12,5 @@
 /vendor/
 /bin/
 /dist/
+deploy/nginx/certs/*.crt
+deploy/nginx/certs/*.key

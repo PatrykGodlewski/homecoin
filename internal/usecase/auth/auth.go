@@ -19,9 +19,9 @@ type RegisterInput struct {
 }
 
 type RegisterOutput struct {
-	UserID       string
-	AccessToken  string
-	RefreshToken string
+	UserID       string `json:"user_id"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type RegisterUseCase struct {
@@ -93,9 +93,9 @@ type LoginInput struct {
 }
 
 type LoginOutput struct {
-	UserID       string
-	AccessToken  string
-	RefreshToken string
+	UserID       string `json:"user_id"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type LoginUseCase struct {

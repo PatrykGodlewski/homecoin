@@ -1,0 +1,24 @@
+package components
+
+templ Navigation(active string) {
+	<aside class="sidebar">
+		<div class="logo">Home<span>Coin</span></div>
+		<nav>
+			<a href="/dashboard" class={ navClass(active, "dashboard") }>Dashboard</a>
+			<a href="/expenses" class={ navClass(active, "expenses") }>Expenses</a>
+			<a href="/balances" class={ navClass(active, "balances") }>Balances</a>
+			<a href="/budgets" class={ navClass(active, "budgets") }>Budgets</a>
+			<a href="/piggy-banks" class={ navClass(active, "piggy-banks") }>Piggy Banks</a>
+		</nav>
+		<div style="margin-top: auto; padding-top: 1rem;">
+			<a href="/logout" class="nav-btn">Sign out</a>
+		</div>
+	</aside>
+}
+
+func navClass(active, page string) string {
+	if active == page {
+		return "nav-btn active"
+	}
+	return "nav-btn"
+}

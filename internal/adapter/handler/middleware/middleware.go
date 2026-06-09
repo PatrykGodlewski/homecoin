@@ -17,13 +17,17 @@ const UserIDKey contextKey = "userID"
 func Auth(jwt *auth.JWTService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			header := r.Header.Get("Authorization")
-			if header == "" || !strings.HasPrefix(header, "Bearer ") {
+			token := ""
+			if header := r.Header.Get("Authorization"); strings.HasPrefix(header, "Bearer ") {
+				token = strings.TrimPrefix(header, "Bearer ")
+			} else if q := r.URL.Query().Get("token"); q != "" {
+				token = q
+			}
+			if token == "" {
 				response.Error(w, domainerrors.ErrUnauthorized)
 				return
 			}
 
-			token := strings.TrimPrefix(header, "Bearer ")
 			userID, err := jwt.ParseAccessToken(token)
 			if err != nil {
 				response.Error(w, domainerrors.ErrUnauthorized)
@@ -39,6 +43,21 @@ func Auth(jwt *auth.JWTService) func(http.Handler) http.Handler {
 func UserIDFromContext(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(UserIDKey).(string)
 	return id, ok
+}
+
+func SecurityHeaders(behindTLS bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			if behindTLS {
+				w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func Recover(next http.Handler) http.Handler {

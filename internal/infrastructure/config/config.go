@@ -3,20 +3,25 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port            string
-	DatabaseURL     string
-	JWTSecret       string
-	JWTAccessTTL    time.Duration
-	JWTRefreshTTL   time.Duration
-	OpenAIAPIKey    string
-	OpenAIModel     string
-	LogLevel        string
+	Port                string
+	DatabaseURL         string
+	JWTSecret           string
+	JWTAccessTTL        time.Duration
+	JWTRefreshTTL       time.Duration
+	OpenAIAPIKey        string
+	OpenAIModel         string
+	LogLevel            string
+	AutoMigrate         bool
+	WorkerURL           string
+	WorkerInternalToken string
+	TLSBehindProxy      bool
 }
 
 func Load() (*Config, error) {
@@ -39,6 +44,18 @@ func Load() (*Config, error) {
 	cfg.JWTRefreshTTL, err = time.ParseDuration(getEnv("JWT_REFRESH_TTL", "168h"))
 	if err != nil {
 		return nil, fmt.Errorf("parse JWT_REFRESH_TTL: %w", err)
+	}
+
+	cfg.AutoMigrate, err = strconv.ParseBool(getEnv("AUTO_MIGRATE", "true"))
+	if err != nil {
+		return nil, fmt.Errorf("parse AUTO_MIGRATE: %w", err)
+	}
+
+	cfg.WorkerURL = os.Getenv("WORKER_URL")
+	cfg.WorkerInternalToken = os.Getenv("WORKER_INTERNAL_TOKEN")
+	cfg.TLSBehindProxy, err = strconv.ParseBool(getEnv("TLS_BEHIND_PROXY", "false"))
+	if err != nil {
+		return nil, fmt.Errorf("parse TLS_BEHIND_PROXY: %w", err)
 	}
 
 	return cfg, nil

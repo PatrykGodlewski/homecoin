@@ -1,0 +1,110 @@
+package expense
+
+import (
+	"github.com/godlew/homecoin/internal/ui/views/components"
+	"github.com/godlew/homecoin/internal/ui/views/layouts"
+)
+
+type Item struct {
+	Title    string
+	Amount   string
+	Split    string
+	Category string
+}
+
+type Member struct {
+	ID   string
+	Name string
+}
+
+type CategoryOption struct {
+	ID   string
+	Name string
+}
+
+type ListData struct {
+	Items      []Item
+	Members    []Member
+	Categories []CategoryOption
+	Error      string
+}
+
+templ ListPage(data ListData) {
+	@layouts.App("expenses") {
+		<div class="topbar">
+			<h1>Expenses</h1>
+		</div>
+		<div class="grid grid-2">
+			<div class="card">
+				<h3>Add expense</h3>
+				<form method="post" action="/expenses">
+					@components.FormGroup("Title", "title") {
+						@components.TextField("title", "title", "text", true, "", "", "", "", "")
+					}
+					@components.FormGroup("Amount", "amount") {
+						@components.TextField("amount", "amount", "number", true, "", "", "0.01", "0.01", "")
+					}
+					@components.FormGroup("Category", "category_id") {
+						@components.SelectField("category_id", "category_id", false, categorySelectOptions(data.Categories))
+					}
+					@components.FormGroup("Paid by", "payer_id") {
+						@components.SelectField("payer_id", "payer_id", true, memberSelectOptions(data.Members))
+					}
+					@components.FormGroup("Split with (optional)", "debtor_id") {
+						@components.SelectField("debtor_id", "debtor_id", false, debtorSelectOptions(data.Members))
+					}
+					<div class="form-actions">
+						@components.Button("Add expense", components.ButtonPrimary, components.ButtonSizeDefault, false, true)
+					</div>
+				</form>
+			</div>
+			<div class="card">
+				<h3>Recent expenses</h3>
+				if len(data.Items) == 0 {
+					<p class="empty">No expenses yet</p>
+				} else {
+					<ul class="list">
+						for _, item := range data.Items {
+							<li>
+								<span>
+									{ item.Title }
+									if item.Category != "" {
+										<span class="badge">{ item.Category }</span>
+									}
+									<span class="badge">{ item.Split }</span>
+								</span>
+								<span class="amount">{ item.Amount }</span>
+							</li>
+						}
+					</ul>
+				}
+			</div>
+		</div>
+	}
+}
+
+func categorySelectOptions(categories []CategoryOption) []components.SelectOption {
+	opts := make([]components.SelectOption, 1+len(categories))
+	opts[0] = components.SelectOption{Value: "", Label: "None"}
+	for i, c := range categories {
+		opts[i+1] = components.SelectOption{Value: c.ID, Label: c.Name}
+	}
+	return opts
+}
+
+func memberSelectOptions(members []Member) []components.SelectOption {
+	opts := make([]components.SelectOption, len(members))
+	for i, m := range members {
+		opts[i] = components.SelectOption{Value: m.ID, Label: m.Name}
+	}
+	return opts
+}
+
+func debtorSelectOptions(members []Member) []components.SelectOption {
+	opts := make([]components.SelectOption, 1+len(members))
+	opts[0] = components.SelectOption{Value: "", Label: "Equal split"}
+	for i, m := range members {
+		opts[i+1] = components.SelectOption{Value: m.ID, Label: m.Name}
+	}
+	return opts
+}

@@ -15,8 +15,8 @@ type RefreshInput struct {
 }
 
 type RefreshOutput struct {
-	AccessToken  string
-	RefreshToken string
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type RefreshUseCase struct {

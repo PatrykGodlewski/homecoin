@@ -1,0 +1,18 @@
+package components
+
+templ BudgetCup(name string, percent int, spent string, limit string, overBudget bool, fillY int, fillH int) {
+	<div class="cup-card card">
+		<div class="cup-wrap">
+			<svg class="cup-svg" viewBox="0 0 80 100" aria-hidden="true">
+				<path d="M10 15 L10 85 Q10 95 20 95 L60 95 Q70 95 70 85 L70 15 Z" fill="none" stroke="#2a3344" stroke-width="3"/>
+				<rect class="cup-fill-rect" x="14" y={ fillY } width="52" height={ fillH } fill="#3b82f6" rx="2"/>
+			</svg>
+		</div>
+		<div class="cup-label">{ name }</div>
+		if overBudget {
+			<div class="cup-pct over">{ percent }% · { spent } / { limit }</div>
+		} else {
+			<div class="cup-pct">{ percent }% · { spent } / { limit }</div>
+		}
+	</div>
+}

@@ -1,0 +1,101 @@
+package components
+
+type SelectOption struct {
+	Value    string
+	Label    string
+	Selected bool
+	Disabled bool
+}
+
+type ButtonKind string
+
+const (
+	ButtonPrimary   ButtonKind = "primary"
+	ButtonSecondary ButtonKind = "secondary"
+	ButtonDanger    ButtonKind = "danger"
+)
+
+type ButtonSize string
+
+const (
+	ButtonSizeDefault ButtonSize = ""
+	ButtonSizeSmall   ButtonSize = "sm"
+)
+
+templ FormGroup(label, forID string) {
+	<div class="form-group">
+		<label for={ forID }>{ label }</label>
+		{ children... }
+	</div>
+}
+
+templ TextField(id, name, inputType string, required bool, placeholder, autocomplete, step, min, minlength string) {
+	<input
+		class="field"
+		type={ inputType }
+		if id != "" {
+			id={ id }
+		}
+		name={ name }
+		if required {
+			required
+		}
+		if placeholder != "" {
+			placeholder={ placeholder }
+		}
+		if autocomplete != "" {
+			autocomplete={ autocomplete }
+		}
+		if step != "" {
+			step={ step }
+		}
+		if min != "" {
+			min={ min }
+		}
+		if minlength != "" {
+			minlength={ minlength }
+		}
+	/>
+}
+
+templ SelectField(id, name string, required bool, options []SelectOption) {
+	<div class="field-select-wrap">
+		<select class="field field-select" id={ id } name={ name } if required { required }>
+			for _, opt := range options {
+				<option value={ opt.Value } selected?={ opt.Selected } disabled?={ opt.Disabled }>{ opt.Label }</option>
+			}
+		</select>
+	</div>
+}
+
+templ Button(text string, kind ButtonKind, size ButtonSize, block bool, submit bool) {
+	<button type={ buttonType(submit) } class={ buttonClass(kind, size, block) }>
+		{ text }
+	</button>
+}
+
+func buttonType(submit bool) string {
+	if submit {
+		return "submit"
+	}
+	return "button"
+}
+
+func buttonClass(kind ButtonKind, size ButtonSize, block bool) string {
+	cls := "btn"
+	switch kind {
+	case ButtonPrimary:
+		cls += " btn-primary"
+	case ButtonSecondary:
+		cls += " btn-secondary"
+	case ButtonDanger:
+		cls += " btn-danger"
+	}
+	if size == ButtonSizeSmall {
+		cls += " btn-sm"
+	}
+	if block {
+		cls += " btn-block"
+	}
+	return cls
+}

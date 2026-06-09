@@ -1,0 +1,70 @@
+package budget
+
+import (
+	"github.com/godlew/homecoin/internal/ui/views/components"
+	"github.com/godlew/homecoin/internal/ui/views/layouts"
+)
+
+type Item struct {
+	Name   string
+	Spent  string
+	Limit  string
+	Period string
+}
+
+type CategoryOption struct {
+	ID   string
+	Name string
+}
+
+type ListData struct {
+	Items      []Item
+	Categories []CategoryOption
+}
+
+templ ListPage(data ListData) {
+	@layouts.App("budgets") {
+		<div class="topbar">
+			<h1>Budgets</h1>
+		</div>
+		<div class="grid grid-2">
+			<div class="card">
+				<h3>Create budget</h3>
+				<form method="post" action="/budgets">
+					@components.FormGroup("Category", "category_id") {
+						@components.SelectField("category_id", "category_id", true, categorySelectOptions(data.Categories))
+					}
+					@components.FormGroup("Monthly limit", "limit") {
+						@components.TextField("limit", "limit", "number", true, "", "", "0.01", "1", "")
+					}
+					<div class="form-actions">
+						@components.Button("Create budget", components.ButtonPrimary, components.ButtonSizeDefault, false, true)
+					</div>
+				</form>
+			</div>
+			<div class="card">
+				<h3>Current budgets</h3>
+				if len(data.Items) == 0 {
+					<p class="empty">No budgets configured</p>
+				} else {
+					<ul class="list">
+						for _, item := range data.Items {
+							<li>
+								<span>{ item.Name } <span class="badge">{ item.Period }</span></span>
+								<span class="amount">{ item.Spent } / { item.Limit }</span>
+							</li>
+						}
+					</ul>
+				}
+			</div>
+		</div>
+	}
+}
+
+func categorySelectOptions(categories []CategoryOption) []components.SelectOption {
+	opts := make([]components.SelectOption, len(categories))
+	for i, c := range categories {
+		opts[i] = components.SelectOption{Value: c.ID, Label: c.Name}
+	}
+	return opts
+}

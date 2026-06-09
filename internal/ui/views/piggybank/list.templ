@@ -1,0 +1,75 @@
+package piggybank
+
+import (
+	"strconv"
+
+	"github.com/godlew/homecoin/internal/ui/views/components"
+	"github.com/godlew/homecoin/internal/ui/views/layouts"
+)
+
+type Item struct {
+	ID      string
+	Name    string
+	Current string
+	Target  string
+	Percent int
+	Status  string
+}
+
+templ ListPage(items []Item) {
+	@layouts.App("piggy-banks") {
+		<div class="topbar">
+			<h1>Piggy Banks</h1>
+		</div>
+		<div class="grid grid-2">
+			<div class="card">
+				<h3>New savings goal</h3>
+				<form method="post" action="/piggy-banks">
+					@components.FormGroup("Name", "name") {
+						@components.TextField("name", "name", "text", true, "Vacation fund", "", "", "", "")
+					}
+					@components.FormGroup("Target amount", "target") {
+						@components.TextField("target", "target", "number", true, "", "", "0.01", "1", "")
+					}
+					<div class="form-actions">
+						@components.Button("Create", components.ButtonPrimary, components.ButtonSizeDefault, false, true)
+					</div>
+				</form>
+			</div>
+			<div class="card">
+				<h3>Your goals</h3>
+				if len(items) == 0 {
+					<p class="empty">No piggy banks yet</p>
+				} else {
+					<div class="grid" style="gap: 1rem;">
+						for _, item := range items {
+							<div class="card" style="padding: 1rem;">
+								<div style="display: flex; justify-content: space-between; align-items: center;">
+									<strong>{ item.Name }</strong>
+									<span class="badge">{ item.Status }</span>
+								</div>
+								<div class="progress-bar">
+									<div class="progress-fill" style={ progressWidth(item.Percent) }></div>
+								</div>
+								<p class="cup-pct">{ item.Current } / { item.Target } ({ item.Percent }%)</p>
+								<form method="post" action={ "/piggy-banks/" + item.ID + "/contribute" } style="margin-top: 0.75rem;">
+									<div class="input-row">
+										@components.TextField("", "amount", "number", true, "Amount", "", "0.01", "0.01", "")
+										@components.Button("Add", components.ButtonSecondary, components.ButtonSizeSmall, false, true)
+									</div>
+								</form>
+							</div>
+						}
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+func progressWidth(percent int) string {
+	if percent > 100 {
+		percent = 100
+	}
+	return "width: " + strconv.Itoa(percent) + "%"
+}

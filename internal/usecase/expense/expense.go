@@ -30,9 +30,9 @@ type AddUseCase struct {
 	expenses     repository.ExpenseRepository
 	households   repository.HouseholdRepository
 	outbox       repository.OutboxRepository
-	splitCalc    *service.SplitCalculator
-	recalcCh     chan<- string
-	budgetCheck  BudgetChecker
+	splitCalc     *service.SplitCalculator
+	recalcTrigger service.RecalcTrigger
+	budgetCheck   BudgetChecker
 }
 
 type BudgetChecker interface {
@@ -44,16 +44,16 @@ func NewAddUseCase(
 	households repository.HouseholdRepository,
 	outbox repository.OutboxRepository,
 	splitCalc *service.SplitCalculator,
-	recalcCh chan<- string,
+	recalcTrigger service.RecalcTrigger,
 	budgetCheck BudgetChecker,
 ) *AddUseCase {
 	return &AddUseCase{
-		expenses:    expenses,
-		households:  households,
-		outbox:      outbox,
-		splitCalc:   splitCalc,
-		recalcCh:    recalcCh,
-		budgetCheck: budgetCheck,
+		expenses:      expenses,
+		households:    households,
+		outbox:        outbox,
+		splitCalc:     splitCalc,
+		recalcTrigger: recalcTrigger,
+		budgetCheck:   budgetCheck,
 	}
 }
 
@@ -124,10 +124,7 @@ func (uc *AddUseCase) Execute(ctx context.Context, input AddInput) (*entity.Expe
 		Payload:     payload,
 	})
 
-	select {
-	case uc.recalcCh <- input.HouseholdID:
-	default:
-	}
+	uc.recalcTrigger.Trigger(ctx, input.HouseholdID)
 
 	if uc.budgetCheck != nil && input.CategoryID != nil {
 		_ = uc.budgetCheck.ExecuteForHousehold(ctx, input.HouseholdID)

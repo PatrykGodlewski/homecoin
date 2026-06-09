@@ -1,0 +1,11 @@
+.git
+.github
+.cursor
+bin
+*.md
+.env
+.env.*
+!.env.example
+infra
+scripts/seed.sql
+**/*_test.go

@@ -1,0 +1,14 @@
+package layouts
+
+import "github.com/godlew/homecoin/internal/ui/views/components"
+
+templ App(active string) {
+	@BaseLayout() {
+		<div class="shell">
+			@components.Navigation(active)
+			<main class="main">
+				{ children... }
+			</main>
+		</div>
+	}
+}

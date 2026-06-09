@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: homecoin
       POSTGRES_DB: homecoin
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - homecoin_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,6 +15,73 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  worker:
+    build:
+      context: .
+      target: worker
+    container_name: homecoin-worker
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://homecoin:homecoin@postgres:5432/homecoin?sslmode=disable
+      WORKER_INTERNAL_TOKEN: ${WORKER_INTERNAL_TOKEN:-dev-worker-internal-token-change-me}
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  api:
+    build:
+      context: .
+      target: api
+    container_name: homecoin-api
+    expose:
+      - "8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://homecoin:homecoin@postgres:5432/homecoin?sslmode=disable
+      JWT_SECRET: dev-secret-change-in-production
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 168h
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: gpt-4o-mini
+      LOG_LEVEL: info
+      AUTO_MIGRATE: "true"
+      SUPERKIT_ENV: production
+      SUPERKIT_SECRET: dev-superkit-secret-change-in-production-32chars
+      WORKER_URL: http://worker:8080
+      WORKER_INTERNAL_TOKEN: ${WORKER_INTERNAL_TOKEN:-dev-worker-internal-token-change-me}
+      TLS_BEHIND_PROXY: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: homecoin-nginx
+    ports:
+      - "${API_PORT:-8081}:443"
+      - "${API_HTTP_PORT:-8080}:80"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   homecoin_pgdata:

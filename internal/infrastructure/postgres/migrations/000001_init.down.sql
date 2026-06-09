@@ -1,0 +1,27 @@
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS ai_budget_suggestions;
+DROP TABLE IF EXISTS piggy_bank_contributions;
+DROP TABLE IF EXISTS piggy_banks;
+DROP TABLE IF EXISTS budget_alerts;
+DROP TABLE IF EXISTS budgets;
+DROP TABLE IF EXISTS debt_reminders;
+DROP TABLE IF EXISTS settlements;
+DROP TABLE IF EXISTS household_balances;
+DROP TABLE IF EXISTS expense_splits;
+DROP TABLE IF EXISTS expenses;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS household_members;
+DROP TABLE IF EXISTS households;
+DROP TABLE IF EXISTS users;
+
+DROP TYPE IF EXISTS notification_type;
+DROP TYPE IF EXISTS notification_channel;
+DROP TYPE IF EXISTS piggy_bank_status;
+DROP TYPE IF EXISTS alert_status;
+DROP TYPE IF EXISTS budget_period;
+DROP TYPE IF EXISTS reminder_status;
+DROP TYPE IF EXISTS settlement_status;
+DROP TYPE IF EXISTS split_type;
+DROP TYPE IF EXISTS user_role;

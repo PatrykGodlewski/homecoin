@@ -28,6 +28,7 @@ type SuggestUseCase struct {
 	aiClient    *openaiinfra.Client
 	monitor     *service.BudgetMonitor
 	model       string
+	apiKey      string
 }
 
 func NewSuggestUseCase(
@@ -39,6 +40,7 @@ func NewSuggestUseCase(
 	aiRepo repository.AISuggestionRepository,
 	aiClient *openaiinfra.Client,
 	model string,
+	apiKey string,
 ) *SuggestUseCase {
 	return &SuggestUseCase{
 		households: households,
@@ -50,6 +52,7 @@ func NewSuggestUseCase(
 		aiClient:   aiClient,
 		monitor:    service.NewBudgetMonitor(),
 		model:      model,
+		apiKey:     apiKey,
 	}
 }
 
@@ -144,8 +147,8 @@ func (uc *SuggestUseCase) Execute(ctx context.Context, input SuggestInput) (*ent
 		return nil, err
 	}
 
-	if uc.aiClient == nil {
-		return nil, fmt.Errorf("%w: AI service not configured", domainerrors.ErrInvalidInput)
+	if uc.apiKey == "" || uc.aiClient == nil {
+		return nil, fmt.Errorf("%w: set OPENAI_API_KEY to use AI budgeting", domainerrors.ErrInvalidInput)
 	}
 	if len(metaBytes) == 0 {
 		return nil, fmt.Errorf("%w: empty metadata", domainerrors.ErrInvalidInput)

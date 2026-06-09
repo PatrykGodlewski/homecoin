@@ -9,6 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anthdm/superkit/kit"
+	"github.com/godlew/homecoin/internal/ui"
+	"github.com/godlew/homecoin/internal/ui/appctx"
 	"github.com/godlew/homecoin/internal/adapter/handler"
 	postgresrepo "github.com/godlew/homecoin/internal/adapter/repository/postgres"
 	"github.com/godlew/homecoin/internal/adapter/worker"
@@ -19,6 +22,7 @@ import (
 	openaiinfra "github.com/godlew/homecoin/internal/infrastructure/openai"
 	"github.com/godlew/homecoin/internal/infrastructure/postgres"
 	"github.com/godlew/homecoin/internal/infrastructure/realtime"
+	"github.com/godlew/homecoin/internal/infrastructure/workerclient"
 	authuc "github.com/godlew/homecoin/internal/usecase/auth"
 	balanceuc "github.com/godlew/homecoin/internal/usecase/balance"
 	budgetuc "github.com/godlew/homecoin/internal/usecase/budget"
@@ -37,9 +41,23 @@ func main() {
 		panic(err)
 	}
 
+	// Superkit's kit.Setup() requires a .env file on disk; Docker injects env vars
+	// directly and often has no file. An empty .env is enough for godotenv.Load().
+	if _, err := os.Stat(".env"); os.IsNotExist(err) {
+		_ = os.WriteFile(".env", nil, 0o644)
+	}
+	kit.Setup()
+
 	log := logger.New(cfg.LogLevel)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if cfg.AutoMigrate {
+		if err := postgres.RunMigrations(cfg.DatabaseURL, log); err != nil {
+			log.Error("database migration failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -69,7 +87,14 @@ func main() {
 	hub := realtime.NewHub()
 	aiClient := openaiinfra.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIModel)
 
+	if err := workerclient.ValidateConfig(cfg.WorkerURL, cfg.WorkerInternalToken); err != nil {
+		log.Error("invalid worker configuration", "error", err)
+		os.Exit(1)
+	}
+
 	recalcCh := make(chan string, 64)
+	recalcTrigger := workerclient.NewRecalcTrigger(cfg.WorkerURL, cfg.WorkerInternalToken, recalcCh, log)
+	microservicesMode := cfg.WorkerURL != ""
 
 	checkBudgetUC := budgetuc.NewCheckThresholdsUseCase(budgetRepo, expenseRepo, budgetAlertRepo, notificationRepo, outboxRepo)
 
@@ -79,13 +104,13 @@ func main() {
 	meUC := authuc.NewMeUseCase(userRepo, householdRepo)
 	updateProfileUC := authuc.NewUpdateProfileUseCase(userRepo, householdRepo)
 
-	createHouseholdUC := householduc.NewCreateUseCase(householdRepo)
+	createHouseholdUC := householduc.NewCreateUseCase(householdRepo, categoryRepo)
 	joinHouseholdUC := householduc.NewJoinUseCase(householdRepo)
 	getHouseholdUC := householduc.NewGetUseCase(householdRepo, userRepo)
 	getMineHouseholdUC := householduc.NewGetMineUseCase(householdRepo, userRepo)
 	leaveHouseholdUC := householduc.NewLeaveUseCase(householdRepo)
 
-	addExpenseUC := expenseuc.NewAddUseCase(expenseRepo, householdRepo, outboxRepo, splitCalc, recalcCh, checkBudgetUC)
+	addExpenseUC := expenseuc.NewAddUseCase(expenseRepo, householdRepo, outboxRepo, splitCalc, recalcTrigger, checkBudgetUC)
 	listExpensesUC := expenseuc.NewListUseCase(expenseRepo, householdRepo)
 
 	getBalancesUC := balanceuc.NewGetUseCase(balanceRepo, householdRepo)
@@ -95,7 +120,7 @@ func main() {
 	createBudgetUC := budgetuc.NewCreateUseCase(budgetRepo, categoryRepo, householdRepo)
 	listBudgetsUC := budgetuc.NewListUseCase(budgetRepo, householdRepo)
 	usageBudgetUC := budgetuc.NewUsageUseCase(budgetRepo, expenseRepo, householdRepo)
-	suggestBudgetUC := budgetuc.NewSuggestUseCase(householdRepo, categoryRepo, budgetRepo, expenseRepo, userRepo, aiRepo, aiClient, cfg.OpenAIModel)
+	suggestBudgetUC := budgetuc.NewSuggestUseCase(householdRepo, categoryRepo, budgetRepo, expenseRepo, userRepo, aiRepo, aiClient, cfg.OpenAIModel, cfg.OpenAIAPIKey)
 	listSuggestionsUC := budgetuc.NewListSuggestionsUseCase(aiRepo, householdRepo)
 	listAlertsUC := budgetuc.NewListAlertsUseCase(budgetAlertRepo, householdRepo)
 	ackAlertUC := budgetuc.NewAckAlertUseCase(budgetAlertRepo, householdRepo)
@@ -105,7 +130,7 @@ func main() {
 
 	createSettlementUC := settlementuc.NewCreateUseCase(settlementRepo, householdRepo, outboxRepo, notificationRepo)
 	listSettlementsUC := settlementuc.NewListUseCase(settlementRepo, householdRepo)
-	updateSettlementUC := settlementuc.NewUpdateStatusUseCase(settlementRepo, householdRepo, outboxRepo, recalcCh)
+	updateSettlementUC := settlementuc.NewUpdateStatusUseCase(settlementRepo, householdRepo, outboxRepo, recalcTrigger)
 
 	createPiggyBankUC := piggybankuc.NewCreateUseCase(piggyBankRepo, householdRepo)
 	contributePiggyBankUC := piggybankuc.NewContributeUseCase(piggyBankRepo, householdRepo, outboxRepo)
@@ -118,8 +143,29 @@ func main() {
 	listRemindersUC := reminderuc.NewListUseCase(reminderRepo, householdRepo)
 	dispatchReminderUC := reminderuc.NewDispatchUseCase(reminderRepo, notificationRepo, outboxRepo)
 
+	appctx.App = &appctx.Application{
+		Register:       registerUC,
+		Login:          loginUC,
+		Me:             meUC,
+		CreateHH:       createHouseholdUC,
+		JoinHH:         joinHouseholdUC,
+		GetHH:          getHouseholdUC,
+		GetMineHH:      getMineHouseholdUC,
+		AddExpense:     addExpenseUC,
+		ListExpenses:   listExpensesUC,
+		GetBalances:    getBalancesUC,
+		SimplifyBal:    simplifyBalancesUC,
+		UsageBudget:    usageBudgetUC,
+		CreateBudget:   createBudgetUC,
+		ListCategories: listCategoriesUC,
+		CreatePiggy:    createPiggyBankUC,
+		Contribute:     contributePiggyBankUC,
+		ListPiggy:      listPiggyBanksUC,
+	}
+
 	router := handler.NewRouter(handler.Deps{
-		JWT: jwtService,
+		JWT:            jwtService,
+		TLSBehindProxy: cfg.TLSBehindProxy,
 		AuthHandler: handler.NewAuthHandler(
 			registerUC, loginUC, refreshUC, meUC, updateProfileUC,
 		),
@@ -137,24 +183,33 @@ func main() {
 		PiggyBankHandler:    handler.NewPiggyBankHandler(createPiggyBankUC, contributePiggyBankUC, listPiggyBanksUC),
 		NotificationHandler: handler.NewNotificationHandler(listNotificationsUC, markReadNotificationUC),
 		ReminderHandler:     handler.NewReminderHandler(scheduleReminderUC, listRemindersUC),
-		SSEHandler:          handler.NewSSEHandler(hub, householdRepo),
+		SSEHandler:          handler.NewSSEHandler(hub, householdRepo, jwtService),
 	})
 
-	go worker.NewBalanceRecalculator(recalcCh, recalcBalancesUC, log).Run(ctx)
-	go worker.NewOutboxPublisher(outboxRepo, hub, log).Run(ctx)
-	go worker.NewBudgetMonitorWorker(budgetRepo, checkBudgetUC, log).Run(ctx)
-	go worker.NewDebtReminderWorker(dispatchReminderUC, log).Run(ctx)
+	mux := router
+	ui.RegisterStatic(mux)
+	mux.HandleFunc("/*", kit.Handler(ui.NotFoundHandler))
+	ui.InitializeRoutes(mux)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),
-		Handler:      router,
+		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
 	}
 
+	go worker.NewOutboxPublisher(outboxRepo, hub, log).Run(ctx)
+	if microservicesMode {
+		log.Info("microservices mode: background jobs delegated to worker service", "worker_url", cfg.WorkerURL)
+	} else {
+		go worker.NewBalanceRecalculator(recalcCh, recalcBalancesUC, log).Run(ctx)
+		go worker.NewBudgetMonitorWorker(budgetRepo, checkBudgetUC, log).Run(ctx)
+		go worker.NewDebtReminderWorker(dispatchReminderUC, log).Run(ctx)
+	}
+
 	go func() {
-		log.Info("server starting", "port", cfg.Port)
+		log.Info("server starting", "port", cfg.Port, "superkit_env", kit.Env())
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("server error", "error", err)
 			os.Exit(1)

@@ -19,16 +19,17 @@ type CreateInput struct {
 }
 
 type CreateOutput struct {
-	HouseholdID string
-	InviteCode  string
+	HouseholdID string `json:"household_id"`
+	InviteCode  string `json:"invite_code"`
 }
 
 type CreateUseCase struct {
 	households repository.HouseholdRepository
+	categories repository.CategoryRepository
 }
 
-func NewCreateUseCase(households repository.HouseholdRepository) *CreateUseCase {
-	return &CreateUseCase{households: households}
+func NewCreateUseCase(households repository.HouseholdRepository, categories repository.CategoryRepository) *CreateUseCase {
+	return &CreateUseCase{households: households, categories: categories}
 }
 
 func (uc *CreateUseCase) Execute(ctx context.Context, input CreateInput) (*CreateOutput, error) {
@@ -70,6 +71,12 @@ func (uc *CreateUseCase) Execute(ctx context.Context, input CreateInput) (*Creat
 	}
 	if err := uc.households.AddMember(ctx, member); err != nil {
 		return nil, err
+	}
+
+	if uc.categories != nil {
+		if err := seedDefaultCategories(ctx, uc.categories, h.ID); err != nil {
+			return nil, fmt.Errorf("seed categories: %w", err)
+		}
 	}
 
 	return &CreateOutput{HouseholdID: h.ID, InviteCode: code}, nil

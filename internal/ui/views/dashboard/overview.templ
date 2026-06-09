@@ -1,0 +1,99 @@
+package dashboard
+
+import (
+	"strconv"
+
+	"github.com/godlew/homecoin/internal/ui/views/components"
+	"github.com/godlew/homecoin/internal/ui/views/layouts"
+)
+
+type CupData struct {
+	Name       string
+	Percent    int
+	Spent      string
+	Limit      string
+	OverBudget bool
+	FillY      int
+	FillH      int
+}
+
+type PiggyBankData struct {
+	Name    string
+	Current string
+	Target  string
+	Percent int
+	Status  string
+}
+
+type OverviewData struct {
+	UserName    string
+	Household   string
+	Currency    string
+	MemberCount int
+	TotalSpent  string
+	Cups        []CupData
+	PiggyBanks  []PiggyBankData
+}
+
+templ Overview(data OverviewData) {
+	@layouts.App("dashboard") {
+		<div class="topbar">
+			<div>
+				<h1>Dashboard</h1>
+				<p class="subtitle" style="margin: 0;">{ data.Household } · { data.MemberCount } members</p>
+			</div>
+			<span class="badge">Hi, { data.UserName }</span>
+		</div>
+		<div class="grid grid-3" style="margin-bottom: 1.5rem;">
+			<div class="card">
+				<div class="stat-label">Total spent</div>
+				<div class="stat-value">{ data.TotalSpent }</div>
+			</div>
+			<div class="card">
+				<div class="stat-label">Currency</div>
+				<div class="stat-value" style="font-size: 1.25rem;">{ data.Currency }</div>
+			</div>
+			<div class="card">
+				<div class="stat-label">Budget cups</div>
+				<div class="stat-value" style="font-size: 1.25rem;">{ len(data.Cups) }</div>
+			</div>
+		</div>
+		<h2 style="margin-bottom: 1rem; font-size: 1.1rem;">Budget usage</h2>
+		if len(data.Cups) == 0 {
+			<div class="card empty">No budgets yet. <a href="/budgets">Create a budget</a></div>
+		} else {
+			<div class="cups-grid">
+				for _, cup := range data.Cups {
+					@components.BudgetCup(cup.Name, cup.Percent, cup.Spent, cup.Limit, cup.OverBudget, cup.FillY, cup.FillH)
+				}
+			</div>
+		}
+		<h2 style="margin: 2rem 0 1rem; font-size: 1.1rem;">Piggy banks</h2>
+		if len(data.PiggyBanks) == 0 {
+			<div class="card empty">No savings goals yet. <a href="/piggy-banks">Create a piggy bank</a></div>
+		} else {
+			<div class="grid grid-2">
+				for _, pb := range data.PiggyBanks {
+					<div class="card">
+						<div style="display: flex; justify-content: space-between; align-items: center;">
+							<strong>{ pb.Name }</strong>
+							<span class="badge">{ pb.Status }</span>
+						</div>
+						<div class="progress-bar">
+							<div class="progress-fill" style={ progressWidth(pb.Percent) }></div>
+						</div>
+						<p class="cup-pct">{ pb.Current } / { pb.Target } ({ pb.Percent }%)</p>
+					</div>
+				}
+			</div>
+			<p style="margin-top: 1rem;"><a href="/piggy-banks">Manage piggy banks →</a></p>
+		}
+	}
+}
+
+func progressWidth(percent int) string {
+	if percent > 100 {
+		percent = 100
+	}
+	return "width: " + strconv.Itoa(percent) + "%"
+}

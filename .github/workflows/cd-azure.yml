@@ -1,0 +1,106 @@
+# Deploy HomeCoin microservices (API + Worker) to Azure Container Apps.
+#
+# Repository variables:
+#   AZURE_RESOURCE_GROUP, AZURE_ACR_NAME, AZURE_CONTAINER_APP, AZURE_WORKER_APP
+#
+# Repository secrets:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+
+name: CD — Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Optional image tag (defaults to commit SHA)
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and deploy microservices
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: meta
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push API image
+        run: |
+          az acr build \
+            --registry "${{ vars.AZURE_ACR_NAME }}" \
+            --image "homecoin-api:${{ steps.meta.outputs.tag }}" \
+            --image "homecoin-api:latest" \
+            --target api \
+            --file Dockerfile \
+            .
+
+      - name: Build and push Worker image
+        run: |
+          az acr build \
+            --registry "${{ vars.AZURE_ACR_NAME }}" \
+            --image "homecoin-worker:${{ steps.meta.outputs.tag }}" \
+            --image "homecoin-worker:latest" \
+            --target worker \
+            --file Dockerfile \
+            .
+
+      - name: Deploy Worker Container App
+        run: |
+          ACR_LOGIN=$(az acr show --name "${{ vars.AZURE_ACR_NAME }}" --query loginServer -o tsv)
+          IMAGE="${ACR_LOGIN}/homecoin-worker:${{ steps.meta.outputs.tag }}"
+
+          az containerapp update \
+            --name "${{ vars.AZURE_WORKER_APP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "$IMAGE"
+
+      - name: Deploy API Container App
+        run: |
+          ACR_LOGIN=$(az acr show --name "${{ vars.AZURE_ACR_NAME }}" --query loginServer -o tsv)
+          IMAGE="${ACR_LOGIN}/homecoin-api:${{ steps.meta.outputs.tag }}"
+
+          az containerapp update \
+            --name "${{ vars.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "$IMAGE"
+
+      - name: Health check (HTTPS)
+        run: |
+          FQDN=$(az containerapp show \
+            --name "${{ vars.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+
+          echo "Waiting for https://${FQDN}/health ..."
+          for i in $(seq 1 30); do
+            if curl -sf "https://${FQDN}/health" | grep -q ok; then
+              echo "Deployment healthy."
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::Health check failed after deploy."
+          exit 1

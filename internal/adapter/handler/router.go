@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	skmiddleware "github.com/anthdm/superkit/kit/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 
@@ -12,6 +13,7 @@ import (
 
 type Deps struct {
 	JWT                 *auth.JWTService
+	TLSBehindProxy      bool
 	AuthHandler         *AuthHandler
 	HouseholdHandler    *HouseholdHandler
 	ExpenseHandler      *ExpenseHandler
@@ -25,10 +27,12 @@ type Deps struct {
 	SSEHandler          *SSEHandler
 }
 
-func NewRouter(deps Deps) http.Handler {
+func NewRouter(deps Deps) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Recover)
+	r.Use(middleware.SecurityHeaders(deps.TLSBehindProxy))
+	r.Use(skmiddleware.WithRequest)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

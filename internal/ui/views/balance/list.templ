@@ -1,0 +1,32 @@
+package balance
+
+import "github.com/godlew/homecoin/internal/ui/views/layouts"
+
+type Item struct {
+	From   string
+	To     string
+	Amount string
+}
+
+templ ListPage(items []Item) {
+	@layouts.App("balances") {
+		<div class="topbar">
+			<h1>Balances</h1>
+		</div>
+		<div class="card">
+			<h3>Who owes whom</h3>
+			if len(items) == 0 {
+				<p class="empty">All settled up — no debts between members</p>
+			} else {
+				<ul class="list">
+					for _, item := range items {
+						<li>
+							<span>{ item.From } → { item.To }</span>
+							<span class="amount negative">{ item.Amount }</span>
+						</li>
+					}
+				</ul>
+			}
+		</div>
+	}
+}

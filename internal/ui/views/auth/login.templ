@@ -1,0 +1,32 @@
+package auth
+
+import (
+	"github.com/godlew/homecoin/internal/ui/views/components"
+	"github.com/godlew/homecoin/internal/ui/views/layouts"
+)
+
+templ LoginPage(errMsg string) {
+	@layouts.BaseLayout() {
+		<div class="auth-wrap">
+			<div class="auth-card">
+				<div class="logo">Home<span>Coin</span></div>
+				<p class="subtitle">Sign in to manage household finances</p>
+				if errMsg != "" {
+					<p class="error-msg">{ errMsg }</p>
+				}
+				<form method="post" action="/login">
+					@components.FormGroup("Email", "email") {
+						@components.TextField("email", "email", "email", true, "", "email", "", "", "")
+					}
+					@components.FormGroup("Password", "password") {
+						@components.TextField("password", "password", "password", true, "", "current-password", "", "", "")
+					}
+					<div class="form-actions">
+						@components.Button("Sign in", components.ButtonPrimary, components.ButtonSizeDefault, true, true)
+					</div>
+				</form>
+				<p class="auth-footer">No account? <a href="/register">Create one</a></p>
+			</div>
+		</div>
+	}
+}

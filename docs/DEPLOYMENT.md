@@ -263,10 +263,45 @@ Ręczny deploy z konkretnym tagiem obrazu:
 
 ## Rozwiązywanie problemów
 
-### `Azure login` / OIDC failed
+### `AADSTS700213: No matching federated identity record`
+
+Workflowi używają GitHub environment `production`, więc token OIDC ma subject:
+
+```
+repo:ORG/REPO:environment:production
+```
+
+Skrypt OIDC musi dodać **obie** federated credentials:
+- `repo:ORG/REPO:ref:refs/heads/main` (CD bez environment)
+- `repo:ORG/REPO:environment:production` (azure-infra, cd-azure)
+
+Naprawa na istniejącej aplikacji (użyj `AZURE_CLIENT_ID` z GitHub secrets):
+
+```bash
+az ad app federated-credential create \
+  --id "<AZURE_CLIENT_ID>" \
+  --parameters '{
+    "name": "github-production-env",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:PatrykGodlewski/homecoin:environment:production",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'
+```
+
+Lub uruchom ponownie skrypt z istniejącym APP_ID:
+
+```bash
+export APP_ID="<AZURE_CLIENT_ID>"
+export GITHUB_ORG=PatrykGodlewski
+export GITHUB_REPO=homecoin
+export AZURE_RESOURCE_GROUP=rg-homecoin-prod
+./infra/azure/setup-github-oidc.sh
+```
+
+### `Azure login` / OIDC failed (inne)
 
 - Sprawdź `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
-- Federated credential musi mieć subject: `repo:ORG/REPO:ref:refs/heads/main`.
+- Federated credentials muszą obejmować `repo:ORG/REPO:environment:production` oraz `repo:ORG/REPO:ref:refs/heads/main`.
 - Aplikacja musi mieć rolę Contributor na grupie zasobów.
 
 ### `az acr build` — registry not found

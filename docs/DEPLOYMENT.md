@@ -74,7 +74,7 @@ GitHub Actions loguje się do Azure przez **OpenID Connect** — nie trzeba trzy
 export GITHUB_ORG=your-org          # organizacja lub username
 export GITHUB_REPO=homecoin
 export AZURE_RESOURCE_GROUP=rg-homecoin-prod
-export LOCATION=polandcentral
+export LOCATION=uaenorth
 
 ./infra/azure/setup-github-oidc.sh
 ```
@@ -128,7 +128,7 @@ openssl rand -hex 24   # WORKER_INTERNAL_TOKEN
 | Nazwa | Opis | Przykład |
 |-------|------|----------|
 | `AZURE_RESOURCE_GROUP` | Nazwa grupy zasobów | `rg-homecoin-prod` |
-| `AZURE_LOCATION` | Region Azure | `polandcentral` |
+| `AZURE_LOCATION` | Region Azure | `uaenorth` |
 | `AZURE_ACR_NAME` | Nazwa Container Registry | *(po kroku 5)* |
 | `AZURE_CONTAINER_APP` | Nazwa Container App API | *(po kroku 5)* |
 | `AZURE_WORKER_APP` | Nazwa Container App Worker | *(po kroku 5)* |
@@ -156,7 +156,7 @@ Zmienne `AZURE_ACR_NAME`, `AZURE_CONTAINER_APP`, `AZURE_WORKER_APP` uzupełnisz 
 ### Alternatywnie — lokalnie przez Azure CLI
 
 ```bash
-az group create --name rg-homecoin-prod --location polandcentral
+az group create --name rg-homecoin-prod --location uaenorth
 
 export POSTGRES_ADMIN_PASSWORD='...'
 export JWT_SECRET='...'
@@ -168,7 +168,7 @@ az deployment group create \
   --template-file infra/azure/main.bicep \
   --parameters \
     appName=homecoin \
-    location=polandcentral \
+    location=uaenorth \
     postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" \
     jwtSecret="$JWT_SECRET" \
     superkitSecret="$SUPERKIT_SECRET" \
@@ -267,19 +267,19 @@ Ręczny deploy z konkretnym tagiem obrazu:
 
 Tworzenie **resource group** w regionie (np. `polandcentral`) może działać, ale **Container Apps, ACR, PostgreSQL, Log Analytics** są blokowane polityką subskrypcji.
 
-**Rozwiązanie:** użyj **`northeurope`** (sprawdzony na subskrypcjach studenckich):
+**Rozwiązanie:** wybierz region dozwolony dla PaaS na Twojej subskrypcji (np. **`uaenorth`**, `northeurope`):
 
 ```bash
 az group delete --name rg-homecoin-prod --yes --no-wait
 # poczekaj 2 min
-az group create --name rg-homecoin-prod --location northeurope
+az group create --name rg-homecoin-prod --location uaenorth
 
 RG_ID=$(az group show --name rg-homecoin-prod --query id -o tsv)
 az role assignment create --assignee "<AZURE_CLIENT_ID>" --role Contributor --scope "$RG_ID"
 az role assignment create --assignee "<AZURE_CLIENT_ID>" --role "User Access Administrator" --scope "$RG_ID"
 ```
 
-GitHub Environment Variable: `AZURE_LOCATION` = `northeurope`
+GitHub Environment Variable: `AZURE_LOCATION` = `uaenorth`
 
 ### `Authorization failed ... roleAssignments/write`
 

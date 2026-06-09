@@ -133,17 +133,36 @@ jobs:
           echo "fqdn=$(jq -r '.containerAppFqdn.value' apps-outputs.json)" >> "$GITHUB_OUTPUT"
 
       - name: Health check (HTTPS)
+        if: success()
         run: |
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
           FQDN="${{ steps.apps.outputs.fqdn }}"
 
+          echo "Public URL: https://${FQDN}/"
           echo "Waiting for https://${FQDN}/health ..."
+
           for i in $(seq 1 36); do
-            if curl -sf "https://${FQDN}/health" | grep -q ok; then
+            RUNNING=$(az containerapp show -g "$RG" -n homecoin-api --query properties.runningStatus -o tsv 2>/dev/null || echo "Unknown")
+            REPLICAS=$(az containerapp replica list -g "$RG" -n homecoin-api --query "length(@)" -o tsv 2>/dev/null || echo "0")
+            echo "[$i/36] running=$RUNNING replicas=$REPLICAS"
+
+            if curl -sf --max-time 10 "https://${FQDN}/health" 2>/dev/null | grep -q ok; then
               echo "Deployment healthy."
               exit 0
             fi
+
+            if [ "$RUNNING" = "NotRunning" ] || [ "$REPLICAS" = "0" ]; then
+              echo "--- API logs (app may be crashing) ---"
+              az containerapp logs show -g "$RG" -n homecoin-api --tail 20 2>/dev/null || true
+              echo "--- Worker logs ---"
+              az containerapp logs show -g "$RG" -n homecoin-worker --tail 10 2>/dev/null || true
+            fi
+
             sleep 10
           done
 
-          echo "::error::Health check failed after deploy."
+          echo "::error::Health check failed. Common fix: POSTGRES_ADMIN_PASSWORD in GitHub secrets must match the PostgreSQL server password."
+          echo "--- Final API logs ---"
+          az containerapp logs show -g "$RG" -n homecoin-api --tail 50 || true
+          curl -v --max-time 15 "https://${FQDN}/health" || true
           exit 1

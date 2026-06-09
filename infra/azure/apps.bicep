@@ -48,7 +48,7 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview'
   name: postgresServerName
 }
 
-var databaseUrl = 'postgres://${postgresAdminUser}:${uriComponent(postgresAdminPassword)}@${postgres.properties.fullyQualifiedDomainName}:5432/${postgresDatabaseName}?sslmode=require'
+var databaseUrl = 'postgres://${postgresAdminUser}:${uriComponent(postgresAdminPassword)}@${postgres.properties.fullyQualifiedDomainName}:5432/${postgresDatabaseName}?sslmode=require&connect_timeout=15'
 var apiImage = '${acr.properties.loginServer}/${apiImageName}:${imageTag}'
 var workerImage = '${acr.properties.loginServer}/${workerImageName}:${imageTag}'
 

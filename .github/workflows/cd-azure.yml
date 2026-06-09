@@ -75,17 +75,24 @@ jobs:
           docker push "${ACR_LOGIN}/homecoin-worker:${TAG}"
           docker push "${ACR_LOGIN}/homecoin-worker:latest"
 
-      - name: Remove failed placeholder apps (if any)
+      - name: Remove failed Container Apps (if any)
         run: |
           RG="${{ vars.AZURE_RESOURCE_GROUP }}"
           for app in "${{ vars.AZURE_WORKER_APP }}" "${{ vars.AZURE_CONTAINER_APP }}"; do
-            state=$(az containerapp show -g "$RG" -n "$app" --query properties.provisioningState -o tsv 2>/dev/null || echo "Missing")
-            echo "$app: $state"
-            if [ "$state" = "Failed" ]; then
-              echo "Deleting failed app $app ..."
-              az containerapp delete -g "$RG" -n "$app" --yes
+            if az containerapp show -g "$RG" -n "$app" &>/dev/null; then
+              state=$(az containerapp show -g "$RG" -n "$app" --query properties.provisioningState -o tsv)
+              echo "$app: $state"
+              if [ "$state" = "Failed" ]; then
+                echo "Deleting failed app $app ..."
+                az containerapp delete -g "$RG" -n "$app" --yes
+              fi
+            else
+              echo "$app: not found (will be created)"
             fi
           done
+
+      - name: Wait for ACR image propagation
+        run: sleep 45
 
       - name: Deploy Container Apps (Bicep)
         id: apps

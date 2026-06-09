@@ -137,15 +137,28 @@ jobs:
         run: chmod +x deploy/nginx/generate-certs.sh && ./deploy/nginx/generate-certs.sh
 
       - name: Start stack (microservices + HTTPS)
-        run: docker compose up -d --build --wait
+        run: docker compose up -d --build --wait --wait-timeout 300
+
+      - name: Verify stack healthy
+        run: |
+          docker compose ps
+          curl -sk --max-time 10 --retry 5 --retry-delay 3 https://localhost:8081/health | grep -q ok
 
       - name: E2E smoke test (bash)
-        run: ./scripts/smoke_test.sh
+        run: chmod +x scripts/smoke_test.sh && ./scripts/smoke_test.sh
 
       - name: E2E tests (Go)
         env:
           BASE_URL: https://localhost:8081
         run: go test -tags=e2e ./test/e2e/... -count=1 -v
+
+      - name: E2E debug on failure
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs api --tail 40
+          docker compose logs worker --tail 20
+          docker compose logs nginx --tail 20
 
       - name: E2E summary
         if: success()

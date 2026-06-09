@@ -7,8 +7,22 @@ if [[ "$BASE_URL" == https://* ]]; then
   CURL_OPTS+=(-k)
 fi
 
-echo "==> Health check ($BASE_URL)"
-curl "${CURL_OPTS[@]}" "$BASE_URL/health" | grep -q ok
+wait_for_health() {
+  echo "==> Health check ($BASE_URL)"
+  for i in $(seq 1 45); do
+    if curl "${CURL_OPTS[@]}" --max-time 5 "$BASE_URL/health" 2>/dev/null | grep -q ok; then
+      echo "   OK (attempt $i)"
+      return 0
+    fi
+    echo "   waiting... ($i/45)"
+    sleep 2
+  done
+  echo "   FAILED — last curl attempt:"
+  curl -vk --max-time 5 "$BASE_URL/health" || true
+  return 1
+}
+
+wait_for_health
 
 EMAIL="test-$(date +%s)@homecoin.test"
 echo "==> Register user ($EMAIL)"

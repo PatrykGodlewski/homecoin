@@ -55,6 +55,7 @@ jobs:
 
       - name: Ensure resource group exists
         run: |
+          echo "Deploying to region: ${{ vars.AZURE_LOCATION }}"
           az group create \
             --name "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --location "${{ vars.AZURE_LOCATION }}" \
@@ -64,6 +65,8 @@ jobs:
         id: deploy
         run: |
           DEPLOYMENT_NAME="homecoin-infra-$(date +%Y%m%d%H%M%S)"
+          RG_LOCATION=$(az group show --name "${{ vars.AZURE_RESOURCE_GROUP }}" --query location -o tsv)
+          echo "Resource group location: $RG_LOCATION"
 
           az deployment group create \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
@@ -71,7 +74,7 @@ jobs:
             --template-file infra/azure/main.bicep \
             --parameters \
               appName="${{ inputs.app_name }}" \
-              location="${{ vars.AZURE_LOCATION }}" \
+              location="$RG_LOCATION" \
               postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
               jwtSecret="${{ secrets.JWT_SECRET }}" \
               superkitSecret="${{ secrets.SUPERKIT_SECRET }}" \

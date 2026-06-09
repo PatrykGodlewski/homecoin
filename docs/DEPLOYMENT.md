@@ -263,6 +263,21 @@ Ręczny deploy z konkretnym tagiem obrazu:
 
 ## Rozwiązywanie problemów
 
+### `TasksOperationsNotAllowed` (ACR build)
+
+Subskrypcje **Azure for Students** często blokują `az acr build` (ACR Tasks).
+CD używa `docker build` na runnerze GitHub + `docker push` do ACR.
+
+Nadaj aplikacji GitHub rolę **AcrPush** na registry:
+
+```bash
+ACR_ID=$(az acr show -n homecoinacr7ykjzjsqe67ok -g rg-homecoin-prod --query id -o tsv)
+az role assignment create \
+  --assignee "<AZURE_CLIENT_ID>" \
+  --role AcrPush \
+  --scope "$ACR_ID"
+```
+
 ### `MissingSubscriptionRegistration`
 
 Subskrypcja nie ma zarejestrowanych providerów Azure. Uruchom **raz** lokalnie (własne konto Azure, nie GitHub SP):

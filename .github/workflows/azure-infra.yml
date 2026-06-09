@@ -61,6 +61,17 @@ jobs:
             --location "${{ vars.AZURE_LOCATION }}" \
             --output none
 
+      - name: Register Azure resource providers
+        run: |
+          for ns in Microsoft.App Microsoft.ContainerRegistry Microsoft.DBforPostgreSQL Microsoft.OperationalInsights; do
+            state=$(az provider show --namespace "$ns" --query registrationState -o tsv 2>/dev/null || echo "Unknown")
+            echo "$ns: $state"
+            if [ "$state" != "Registered" ]; then
+              echo "Registering $ns ..."
+              az provider register --namespace "$ns" --wait
+            fi
+          done
+
       - name: Deploy infrastructure
         id: deploy
         run: |
@@ -76,19 +87,14 @@ jobs:
               appName="${{ inputs.app_name }}" \
               location="$RG_LOCATION" \
               postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
-              jwtSecret="${{ secrets.JWT_SECRET }}" \
-              superkitSecret="${{ secrets.SUPERKIT_SECRET }}" \
-              workerInternalToken="${{ secrets.WORKER_INTERNAL_TOKEN }}" \
-              minReplicas=${{ inputs.min_replicas }} \
-              maxReplicas=${{ inputs.max_replicas }} \
-              usePlaceholderImage=true \
             --query properties.outputs \
             --output json > deployment-outputs.json
 
           echo "acr_name=$(jq -r '.acrName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
           echo "container_app=$(jq -r '.containerAppName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
           echo "worker_app=$(jq -r '.workerAppName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "fqdn=$(jq -r '.containerAppFqdn.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "container_env=$(jq -r '.containerEnvName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "postgres_server=$(jq -r '.postgresServerName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         run: |
@@ -99,9 +105,9 @@ jobs:
             echo "|---------|-------|"
             echo "| Resource group | \`${{ vars.AZURE_RESOURCE_GROUP }}\` |"
             echo "| ACR name | \`${{ steps.deploy.outputs.acr_name }}\` |"
-            echo "| API Container App | \`${{ steps.deploy.outputs.container_app }}\` |"
-            echo "| Worker Container App | \`${{ steps.deploy.outputs.worker_app }}\` |"
-            echo "| URL (HTTPS) | https://${{ steps.deploy.outputs.fqdn }} |"
+            echo "| Container Apps Environment | \`${{ steps.deploy.outputs.container_env }}\` |"
+            echo "| API app name (for CD) | \`${{ steps.deploy.outputs.container_app }}\` |"
+            echo "| Worker app name (for CD) | \`${{ steps.deploy.outputs.worker_app }}\` |"
             echo ""
-            echo "Set variables \`AZURE_ACR_NAME\`, \`AZURE_CONTAINER_APP\`, \`AZURE_WORKER_APP\`, then run **CD — Azure**."
+            echo "Set variables \`AZURE_ACR_NAME\`, \`AZURE_CONTAINER_APP\`, \`AZURE_WORKER_APP\`, then run **CD — Azure** to deploy apps."
           } >> "$GITHUB_STEP_SUMMARY"

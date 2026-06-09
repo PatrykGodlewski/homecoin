@@ -263,6 +263,26 @@ Ręczny deploy z konkretnym tagiem obrazu:
 
 ## Rozwiązywanie problemów
 
+### `MissingSubscriptionRegistration`
+
+Subskrypcja nie ma zarejestrowanych providerów Azure. Uruchom **raz** lokalnie (własne konto Azure, nie GitHub SP):
+
+```bash
+chmod +x infra/azure/register-providers.sh
+./infra/azure/register-providers.sh
+```
+
+Lub ręcznie:
+
+```bash
+az provider register --namespace Microsoft.App --wait
+az provider register --namespace Microsoft.ContainerRegistry --wait
+az provider register --namespace Microsoft.DBforPostgreSQL --wait
+az provider register --namespace Microsoft.OperationalInsights --wait
+```
+
+Poczekaj aż wszystkie pokażą `Registered`, potem uruchom **Azure Infrastructure** ponownie.
+
 ### `RequestDisallowedByAzure` — region blocked (Azure for Students)
 
 Tworzenie **resource group** w regionie (np. `polandcentral`) może działać, ale **Container Apps, ACR, PostgreSQL, Log Analytics** są blokowane polityką subskrypcji.

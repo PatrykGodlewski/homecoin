@@ -1,10 +1,14 @@
 # Deploy HomeCoin microservices (API + Worker) to Azure Container Apps.
 #
+# 1. Builds images in ACR
+# 2. Deploys Container Apps via apps.bicep (real images, no placeholder)
+#
 # Repository variables:
 #   AZURE_RESOURCE_GROUP, AZURE_ACR_NAME, AZURE_CONTAINER_APP, AZURE_WORKER_APP
 #
 # Repository secrets:
 #   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   POSTGRES_ADMIN_PASSWORD, JWT_SECRET, SUPERKIT_SECRET, WORKER_INTERNAL_TOKEN
 
 name: CD — Azure
 
@@ -66,35 +70,54 @@ jobs:
             --file Dockerfile \
             .
 
-      - name: Deploy Worker Container App
+      - name: Remove failed placeholder apps (if any)
         run: |
-          ACR_LOGIN=$(az acr show --name "${{ vars.AZURE_ACR_NAME }}" --query loginServer -o tsv)
-          IMAGE="${ACR_LOGIN}/homecoin-worker:${{ steps.meta.outputs.tag }}"
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          for app in "${{ vars.AZURE_WORKER_APP }}" "${{ vars.AZURE_CONTAINER_APP }}"; do
+            state=$(az containerapp show -g "$RG" -n "$app" --query properties.provisioningState -o tsv 2>/dev/null || echo "Missing")
+            echo "$app: $state"
+            if [ "$state" = "Failed" ]; then
+              echo "Deleting failed app $app ..."
+              az containerapp delete -g "$RG" -n "$app" --yes
+            fi
+          done
 
-          az containerapp update \
-            --name "${{ vars.AZURE_WORKER_APP }}" \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --image "$IMAGE"
-
-      - name: Deploy API Container App
+      - name: Deploy Container Apps (Bicep)
+        id: apps
         run: |
-          ACR_LOGIN=$(az acr show --name "${{ vars.AZURE_ACR_NAME }}" --query loginServer -o tsv)
-          IMAGE="${ACR_LOGIN}/homecoin-api:${{ steps.meta.outputs.tag }}"
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          RG_LOCATION=$(az group show --name "$RG" --query location -o tsv)
+          CONTAINER_ENV=$(az containerapp env list -g "$RG" --query "[?starts_with(name, 'homecoin')].name | [0]" -o tsv)
+          POSTGRES_SERVER=$(az postgres flexible-server list -g "$RG" --query "[?starts_with(name, 'homecoin')].name | [0]" -o tsv)
 
-          az containerapp update \
-            --name "${{ vars.AZURE_CONTAINER_APP }}" \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --image "$IMAGE"
+          echo "Container env: $CONTAINER_ENV"
+          echo "PostgreSQL: $POSTGRES_SERVER"
+
+          az deployment group create \
+            --resource-group "$RG" \
+            --name "homecoin-apps-$(date +%Y%m%d%H%M%S)" \
+            --template-file infra/azure/apps.bicep \
+            --parameters \
+              acrName="${{ vars.AZURE_ACR_NAME }}" \
+              containerEnvName="$CONTAINER_ENV" \
+              postgresServerName="$POSTGRES_SERVER" \
+              location="$RG_LOCATION" \
+              postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
+              jwtSecret="${{ secrets.JWT_SECRET }}" \
+              superkitSecret="${{ secrets.SUPERKIT_SECRET }}" \
+              workerInternalToken="${{ secrets.WORKER_INTERNAL_TOKEN }}" \
+              imageTag="${{ steps.meta.outputs.tag }}" \
+            --query properties.outputs \
+            --output json > apps-outputs.json
+
+          echo "fqdn=$(jq -r '.containerAppFqdn.value' apps-outputs.json)" >> "$GITHUB_OUTPUT"
 
       - name: Health check (HTTPS)
         run: |
-          FQDN=$(az containerapp show \
-            --name "${{ vars.AZURE_CONTAINER_APP }}" \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --query "properties.configuration.ingress.fqdn" -o tsv)
+          FQDN="${{ steps.apps.outputs.fqdn }}"
 
           echo "Waiting for https://${FQDN}/health ..."
-          for i in $(seq 1 30); do
+          for i in $(seq 1 36); do
             if curl -sf "https://${FQDN}/health" | grep -q ok; then
               echo "Deployment healthy."
               exit 0

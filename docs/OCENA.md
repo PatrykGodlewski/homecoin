@@ -76,8 +76,10 @@ make docker-api
 | Jednostkowe (domena) | `internal/domain/service/*_test.go` | `go test ./...` |
 | Jednostkowe (auth) | `internal/infrastructure/auth/jwt_test.go` | `go test ./...` |
 | Jednostkowe (worker client) | `internal/infrastructure/workerclient/trigger_test.go` | `go test ./...` |
-| E2E (Go) | `test/e2e/api_test.go` (`-tags=e2e`) | job `e2e` w `ci.yml` |
-| E2E (smoke) | `scripts/smoke_test.sh` | job `e2e` w `ci.yml` |
+| E2E (Go) | `test/e2e/api_test.go` (`-tags=e2e`) | job **E2E tests** w `ci.yml` |
+| E2E (smoke) | `scripts/smoke_test.sh` | job **E2E tests** w `ci.yml` |
+
+**Gdzie zobaczyć w GitHub:** *Actions → workflow **CI** → otwórz run → job **E2E tests*** (ostatni job na liście).
 
 **Potok E2E w CI:**
 1. Generowanie certyfikatów TLS

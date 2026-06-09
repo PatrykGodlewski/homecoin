@@ -1,3 +1,12 @@
+# CI pipeline: unit tests, lint, build, Docker validation, E2E tests.
+#
+# Jobs (left sidebar in GitHub Actions):
+#   Unit tests  → go test ./...
+#   Lint        → go vet
+#   Build       → compile binaries
+#   Docker build→ validate images
+#   E2E tests   → docker compose + smoke_test.sh + go test -tags=e2e  ← wymagane na ocenę bdb
+#
 name: CI
 
 on:
@@ -130,13 +139,27 @@ jobs:
       - name: Start stack (microservices + HTTPS)
         run: docker compose up -d --build --wait
 
-      - name: Smoke test (bash)
+      - name: E2E smoke test (bash)
         run: ./scripts/smoke_test.sh
 
       - name: E2E tests (Go)
         env:
           BASE_URL: https://localhost:8081
         run: go test -tags=e2e ./test/e2e/... -count=1 -v
+
+      - name: E2E summary
+        if: success()
+        run: |
+          {
+            echo "### E2E tests passed"
+            echo ""
+            echo "| Test | Plik |"
+            echo "|------|------|"
+            echo "| Smoke (curl) | \`scripts/smoke_test.sh\` |"
+            echo "| Go E2E | \`test/e2e/api_test.go\` |"
+            echo ""
+            echo "Stack: docker compose (api + worker + postgres + nginx HTTPS)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Tear down
         if: always()

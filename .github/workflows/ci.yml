@@ -166,9 +166,11 @@ jobs:
         if: failure()
         run: |
           docker compose ps -a
+          docker compose exec -T nginx wget -qO- http://127.0.0.1/health || true
+          docker compose exec -T nginx wget -qO- http://api:8080/health || true
           docker compose logs api --tail 40
           docker compose logs worker --tail 20
-          docker compose logs nginx --tail 20
+          docker compose logs nginx --tail 40
 
       - name: E2E summary
         if: success()

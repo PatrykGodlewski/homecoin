@@ -61,16 +61,28 @@ jobs:
             --location "${{ vars.AZURE_LOCATION }}" \
             --output none
 
-      - name: Register Azure resource providers
+      - name: Verify Azure resource providers
         run: |
+          # Provider registration requires subscription Owner/Contributor (human account).
+          # GitHub SP cannot register — only verify status and wait if still registering.
           for ns in Microsoft.App Microsoft.ContainerRegistry Microsoft.DBforPostgreSQL Microsoft.OperationalInsights; do
             state=$(az provider show --namespace "$ns" --query registrationState -o tsv 2>/dev/null || echo "Unknown")
             echo "$ns: $state"
+            if [ "$state" = "Registering" ]; then
+              echo "Waiting for $ns to finish registering..."
+              for i in $(seq 1 20); do
+                sleep 30
+                state=$(az provider show --namespace "$ns" --query registrationState -o tsv)
+                echo "$ns: $state"
+                [ "$state" = "Registered" ] && break
+              done
+            fi
             if [ "$state" != "Registered" ]; then
-              echo "Registering $ns ..."
-              az provider register --namespace "$ns" --wait
+              echo "::error::$ns is not Registered. Run locally: ./infra/azure/register-providers.sh"
+              exit 1
             fi
           done
+          echo "All required providers are Registered."
 
       - name: Deploy infrastructure
         id: deploy

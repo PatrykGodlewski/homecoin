@@ -22,7 +22,7 @@ set -euo pipefail
 APP_NAME="${APP_NAME:-github-homecoin-deploy}"
 SUBSCRIPTION_ID="${SUBSCRIPTION_ID:-$(az account show --query id -o tsv)}"
 TENANT_ID="$(az account show --query tenantId -o tsv)"
-LOCATION="${LOCATION:-$(az group show --name "$AZURE_RESOURCE_GROUP" --query location -o tsv 2>/dev/null || echo westeurope)}"
+LOCATION="${LOCATION:-$(az group show --name "$AZURE_RESOURCE_GROUP" --query location -o tsv 2>/dev/null || echo polandcentral)}"
 
 add_federated_credential() {
   local name="$1"
@@ -60,6 +60,13 @@ RG_ID="$(az group show --name "$AZURE_RESOURCE_GROUP" --query id -o tsv)"
 az role assignment create \
   --assignee "$APP_ID" \
   --role Contributor \
+  --scope "$RG_ID" \
+  --output none 2>/dev/null || true
+
+echo "==> Assigning User Access Administrator (required for Bicep ACR role assignments)"
+az role assignment create \
+  --assignee "$APP_ID" \
+  --role "User Access Administrator" \
   --scope "$RG_ID" \
   --output none 2>/dev/null || true
 

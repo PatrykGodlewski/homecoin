@@ -11,7 +11,7 @@
 #
 # Required repository variables:
 #   AZURE_RESOURCE_GROUP
-#   AZURE_LOCATION           e.g. westeurope
+#   AZURE_LOCATION           e.g. polandcentral
 
 name: Azure Infrastructure
 

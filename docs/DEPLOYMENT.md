@@ -74,7 +74,7 @@ GitHub Actions loguje się do Azure przez **OpenID Connect** — nie trzeba trzy
 export GITHUB_ORG=your-org          # organizacja lub username
 export GITHUB_REPO=homecoin
 export AZURE_RESOURCE_GROUP=rg-homecoin-prod
-export LOCATION=westeurope          # lub: northeurope, polandcentral
+export LOCATION=polandcentral
 
 ./infra/azure/setup-github-oidc.sh
 ```
@@ -128,7 +128,7 @@ openssl rand -hex 24   # WORKER_INTERNAL_TOKEN
 | Nazwa | Opis | Przykład |
 |-------|------|----------|
 | `AZURE_RESOURCE_GROUP` | Nazwa grupy zasobów | `rg-homecoin-prod` |
-| `AZURE_LOCATION` | Region Azure | `westeurope` |
+| `AZURE_LOCATION` | Region Azure | `polandcentral` |
 | `AZURE_ACR_NAME` | Nazwa Container Registry | *(po kroku 5)* |
 | `AZURE_CONTAINER_APP` | Nazwa Container App API | *(po kroku 5)* |
 | `AZURE_WORKER_APP` | Nazwa Container App Worker | *(po kroku 5)* |
@@ -156,7 +156,7 @@ Zmienne `AZURE_ACR_NAME`, `AZURE_CONTAINER_APP`, `AZURE_WORKER_APP` uzupełnisz 
 ### Alternatywnie — lokalnie przez Azure CLI
 
 ```bash
-az group create --name rg-homecoin-prod --location westeurope
+az group create --name rg-homecoin-prod --location polandcentral
 
 export POSTGRES_ADMIN_PASSWORD='...'
 export JWT_SECRET='...'
@@ -168,7 +168,7 @@ az deployment group create \
   --template-file infra/azure/main.bicep \
   --parameters \
     appName=homecoin \
-    location=westeurope \
+    location=polandcentral \
     postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" \
     jwtSecret="$JWT_SECRET" \
     superkitSecret="$SUPERKIT_SECRET" \
@@ -262,6 +262,32 @@ Ręczny deploy z konkretnym tagiem obrazu:
 ---
 
 ## Rozwiązywanie problemów
+
+### `Authorization failed ... roleAssignments/write`
+
+Bicep nadaje rolę **AcrPull** Container Apps wobec ACR — wymaga to uprawnienia `Microsoft.Authorization/roleAssignments/write`.
+Rola **Contributor** tego nie obejmuje.
+
+Naprawa — nadaj aplikacji GitHub rolę **User Access Administrator** na grupie zasobów:
+
+```bash
+az role assignment create \
+  --assignee "2acf1617-cd59-4fa2-b50f-3eda9f883a60" \
+  --role "User Access Administrator" \
+  --scope "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-homecoin-prod"
+```
+
+Lub krócej (jeśli jesteś zalogowany w tej subskrypcji):
+
+```bash
+RG_ID=$(az group show --name rg-homecoin-prod --query id -o tsv)
+az role assignment create \
+  --assignee "2acf1617-cd59-4fa2-b50f-3eda9f883a60" \
+  --role "User Access Administrator" \
+  --scope "$RG_ID"
+```
+
+Poczekaj 1–2 minuty na propagację ról, potem uruchom **Azure Infrastructure** ponownie.
 
 ### `AADSTS700213: No matching federated identity record`
 

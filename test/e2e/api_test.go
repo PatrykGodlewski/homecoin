@@ -21,7 +21,7 @@ func baseURL() string {
 	if v := os.Getenv("BASE_URL"); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	return "https://localhost:8081"
+	return "https://127.0.0.1:8081"
 }
 
 func client() *http.Client {

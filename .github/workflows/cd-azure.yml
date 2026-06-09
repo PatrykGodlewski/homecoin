@@ -98,6 +98,7 @@ jobs:
         id: apps
         run: |
           RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          ACR="${{ vars.AZURE_ACR_NAME }}"
           RG_LOCATION=$(az group show --name "$RG" --query location -o tsv)
           CONTAINER_ENV=$(az containerapp env list -g "$RG" --query "[?starts_with(name, 'homecoin')].name | [0]" -o tsv)
           POSTGRES_SERVER=$(az postgres flexible-server list -g "$RG" --query "[?starts_with(name, 'homecoin')].name | [0]" -o tsv)
@@ -105,12 +106,17 @@ jobs:
           echo "Container env: $CONTAINER_ENV"
           echo "PostgreSQL: $POSTGRES_SERVER"
 
+          # Enable ACR admin user for image pull (avoids AcrPull RBAC issues on student subscriptions)
+          az acr update -n "$ACR" --admin-enabled true --output none
+          ACR_USER=$(az acr credential show -n "$ACR" --query username -o tsv)
+          ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
+
           az deployment group create \
             --resource-group "$RG" \
             --name "homecoin-apps-$(date +%Y%m%d%H%M%S)" \
             --template-file infra/azure/apps.bicep \
             --parameters \
-              acrName="${{ vars.AZURE_ACR_NAME }}" \
+              acrName="$ACR" \
               containerEnvName="$CONTAINER_ENV" \
               postgresServerName="$POSTGRES_SERVER" \
               location="$RG_LOCATION" \
@@ -118,6 +124,8 @@ jobs:
               jwtSecret="${{ secrets.JWT_SECRET }}" \
               superkitSecret="${{ secrets.SUPERKIT_SECRET }}" \
               workerInternalToken="${{ secrets.WORKER_INTERNAL_TOKEN }}" \
+              acrUsername="$ACR_USER" \
+              acrPassword="$ACR_PASS" \
               imageTag="${{ steps.meta.outputs.tag }}" \
             --query properties.outputs \
             --output json > apps-outputs.json

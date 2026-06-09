@@ -1,5 +1,5 @@
 // Deploy HomeCoin API + Worker Container Apps (run after images are pushed to ACR).
-// Uses a pre-created User Assigned Identity with AcrPull BEFORE apps start (avoids pull race).
+// Uses ACR admin credentials for image pull (works on Azure for Students without AcrPull RBAC in Bicep).
 
 param appName string = 'homecoin'
 param location string = resourceGroup().location
@@ -21,6 +21,12 @@ param superkitSecret string
 @secure()
 param workerInternalToken string
 
+@secure()
+param acrUsername string
+
+@secure()
+param acrPassword string
+
 param imageTag string
 param minReplicas int = 1
 param maxReplicas int = 2
@@ -29,7 +35,6 @@ var apiAppName = '${appName}-api'
 var workerAppName = '${appName}-worker'
 var apiImageName = '${appName}-api'
 var workerImageName = '${appName}-worker'
-var pullIdentityName = '${appName}-acr-pull'
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: acrName
@@ -43,33 +48,11 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview'
   name: postgresServerName
 }
 
-resource pullIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: pullIdentityName
-  location: location
-}
-
-resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, pullIdentity.id, 'AcrPull')
-  scope: acr
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7f8-43da3d0d369c')
-    principalId: pullIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 var databaseUrl = 'postgres://${postgresAdminUser}:${uriComponent(postgresAdminPassword)}@${postgres.properties.fullyQualifiedDomainName}:5432/${postgresDatabaseName}?sslmode=require'
 var apiImage = '${acr.properties.loginServer}/${apiImageName}:${imageTag}'
 var workerImage = '${acr.properties.loginServer}/${workerImageName}:${imageTag}'
 
-var registryConfig = [
-  {
-    server: acr.properties.loginServer
-    identity: pullIdentity.id
-  }
-]
-
-var sharedSecrets = [
+var appSecrets = [
   {
     name: 'database-url'
     value: databaseUrl
@@ -85,6 +68,18 @@ var sharedSecrets = [
   {
     name: 'worker-internal-token'
     value: workerInternalToken
+  }
+  {
+    name: 'acr-password'
+    value: acrPassword
+  }
+]
+
+var registryConfig = [
+  {
+    server: acr.properties.loginServer
+    username: acrUsername
+    passwordSecretRef: 'acr-password'
   }
 ]
 
@@ -114,15 +109,6 @@ var startupProbe = [
 resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: workerAppName
   location: location
-  dependsOn: [
-    acrPullRole
-  ]
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${pullIdentity.id}': {}
-    }
-  }
   properties: {
     managedEnvironmentId: containerEnv.id
     configuration: {
@@ -133,7 +119,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
         allowInsecure: false
       }
       registries: registryConfig
-      secrets: sharedSecrets
+      secrets: appSecrets
     }
     template: {
       containers: [
@@ -178,15 +164,6 @@ var workerInternalURL = 'https://${workerApp.properties.configuration.ingress.fq
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: apiAppName
   location: location
-  dependsOn: [
-    workerApp
-  ]
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${pullIdentity.id}': {}
-    }
-  }
   properties: {
     managedEnvironmentId: containerEnv.id
     configuration: {
@@ -197,7 +174,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
         allowInsecure: false
       }
       registries: registryConfig
-      secrets: sharedSecrets
+      secrets: appSecrets
     }
     template: {
       containers: [

@@ -11,7 +11,7 @@
 #
 # Required repository variables:
 #   AZURE_RESOURCE_GROUP
-#   AZURE_LOCATION           e.g. polandcentral
+#   AZURE_LOCATION           e.g. northeurope (Azure for Students often blocks polandcentral for PaaS)
 
 name: Azure Infrastructure
 

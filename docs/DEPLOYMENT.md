@@ -263,6 +263,24 @@ Ręczny deploy z konkretnym tagiem obrazu:
 
 ## Rozwiązywanie problemów
 
+### `RequestDisallowedByAzure` — region blocked (Azure for Students)
+
+Tworzenie **resource group** w regionie (np. `polandcentral`) może działać, ale **Container Apps, ACR, PostgreSQL, Log Analytics** są blokowane polityką subskrypcji.
+
+**Rozwiązanie:** użyj **`northeurope`** (sprawdzony na subskrypcjach studenckich):
+
+```bash
+az group delete --name rg-homecoin-prod --yes --no-wait
+# poczekaj 2 min
+az group create --name rg-homecoin-prod --location northeurope
+
+RG_ID=$(az group show --name rg-homecoin-prod --query id -o tsv)
+az role assignment create --assignee "<AZURE_CLIENT_ID>" --role Contributor --scope "$RG_ID"
+az role assignment create --assignee "<AZURE_CLIENT_ID>" --role "User Access Administrator" --scope "$RG_ID"
+```
+
+GitHub Environment Variable: `AZURE_LOCATION` = `northeurope`
+
 ### `Authorization failed ... roleAssignments/write`
 
 Bicep nadaje rolę **AcrPull** Container Apps wobec ACR — wymaga to uprawnienia `Microsoft.Authorization/roleAssignments/write`.

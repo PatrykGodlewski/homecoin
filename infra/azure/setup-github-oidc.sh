@@ -22,7 +22,7 @@ set -euo pipefail
 APP_NAME="${APP_NAME:-github-homecoin-deploy}"
 SUBSCRIPTION_ID="${SUBSCRIPTION_ID:-$(az account show --query id -o tsv)}"
 TENANT_ID="$(az account show --query tenantId -o tsv)"
-LOCATION="${LOCATION:-$(az group show --name "$AZURE_RESOURCE_GROUP" --query location -o tsv 2>/dev/null || echo polandcentral)}"
+LOCATION="${LOCATION:-$(az group show --name "$AZURE_RESOURCE_GROUP" --query location -o tsv 2>/dev/null || echo northeurope)}"
 
 add_federated_credential() {
   local name="$1"

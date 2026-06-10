@@ -50,6 +50,26 @@ sleep 45
 echo "==> Terraform init"
 terraform -chdir="$TF_DIR" init -input=false
 
+import_container_app_if_needed() {
+  local tf_addr="$1"
+  local app_name="$2"
+  local sub_id
+  sub_id="$(az account show --query id -o tsv)"
+  local app_id="/subscriptions/${sub_id}/resourceGroups/${RG}/providers/Microsoft.App/containerApps/${app_name}"
+
+  if ! az containerapp show -g "$RG" -n "$app_name" &>/dev/null; then
+    return 0
+  fi
+  if terraform -chdir="$TF_DIR" state show "$tf_addr" &>/dev/null; then
+    return 0
+  fi
+  echo "==> Importing existing Container App $app_name into Terraform state"
+  terraform -chdir="$TF_DIR" import -input=false "$tf_addr" "$app_id"
+}
+
+import_container_app_if_needed "azurerm_container_app.worker[0]" "${APP_NAME}-worker"
+import_container_app_if_needed "azurerm_container_app.api[0]" "${APP_NAME}-api"
+
 echo "==> Terraform apply (Container Apps, image_tag=$TAG)"
 terraform -chdir="$TF_DIR" apply -auto-approve -input=false \
   -var="app_name=$APP_NAME" \

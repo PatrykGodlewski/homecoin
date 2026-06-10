@@ -124,6 +124,7 @@ jobs:
           docker push "${ACR_LOGIN}/homecoin-worker:latest"
 
       - name: Terraform apply (Container Apps)
+        id: terraform
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           IMAGE_TAG: ${{ steps.meta.outputs.tag }}
@@ -134,6 +135,13 @@ jobs:
         run: |
           chmod +x infra/scripts/terraform-apply-apps.sh
           ./infra/scripts/terraform-apply-apps.sh
+
+      - name: Save Terraform state
+        if: steps.terraform.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: infra/terraform/homecoin/terraform.tfstate
+          key: terraform-state-v3-${{ vars.AZURE_RESOURCE_GROUP }}
 
       - name: Setup Ansible
         run: pip install ansible
@@ -151,13 +159,6 @@ jobs:
           ANSIBLE_CONFIG=infra/ansible/ansible.cfg \
           ansible-playbook -i infra/ansible/inventory/localhost.ini \
             infra/ansible/playbooks/homecoin.yml
-
-      - name: Save Terraform state
-        if: success()
-        uses: actions/cache/save@v4
-        with:
-          path: infra/terraform/homecoin/terraform.tfstate
-          key: terraform-state-v3-${{ vars.AZURE_RESOURCE_GROUP }}
 
       - name: Summary
         if: success()

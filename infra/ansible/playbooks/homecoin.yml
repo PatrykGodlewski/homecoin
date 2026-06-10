@@ -1,0 +1,115 @@
+---
+# Wdrożenie HomeCoin na VM: Docker + docker compose (api, worker, postgres, nginx).
+- name: Deploy HomeCoin application
+  hosts: webservers
+  become: true
+  vars:
+    homecoin_dir: /opt/homecoin
+    source_archive: "{{ source_archive | default('') }}"
+    git_repo: "{{ git_repo | default('https://github.com/PatrykGodlewski/homecoin.git') }}"
+    git_version: "{{ git_version | default('main') }}"
+    deploy_method: "{{ deploy_method | default('archive') }}"
+    postgres_password: "{{ postgres_password | default('homecoin') }}"
+  tasks:
+    - name: Validate required secrets
+      ansible.builtin.assert:
+        that:
+          - jwt_secret is defined and (jwt_secret | length) >= 32
+          - superkit_secret is defined and (superkit_secret | length) >= 32
+          - worker_internal_token is defined and (worker_internal_token | length) >= 16
+        fail_msg: "Set jwt_secret, superkit_secret and worker_internal_token (min lengths 32/32/16)."
+
+    - name: Install Docker and dependencies
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-plugin
+          - git
+          - openssl
+          - rsync
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add admin user to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Ensure application directory exists
+      ansible.builtin.file:
+        path: "{{ homecoin_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Deploy from source archive
+      when: deploy_method == 'archive'
+      block:
+        - name: Copy source archive to VM
+          ansible.builtin.copy:
+            src: "{{ source_archive }}"
+            dest: /tmp/homecoin-src.tgz
+            mode: "0644"
+
+        - name: Extract application source
+          ansible.builtin.unarchive:
+            src: /tmp/homecoin-src.tgz
+            dest: "{{ homecoin_dir }}"
+            remote_src: true
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+
+    - name: Deploy from Git repository
+      when: deploy_method == 'git'
+      block:
+        - name: Clone or update HomeCoin repository
+          ansible.builtin.git:
+            repo: "{{ git_repo }}"
+            dest: "{{ homecoin_dir }}"
+            version: "{{ git_version }}"
+            force: true
+          become_user: "{{ ansible_user }}"
+
+    - name: Write production environment file
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/env.j2"
+        dest: "{{ homecoin_dir }}/.env"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0600"
+
+    - name: Generate TLS certificates for nginx
+      ansible.builtin.command:
+        cmd: bash deploy/nginx/generate-certs.sh
+        chdir: "{{ homecoin_dir }}"
+      changed_when: true
+
+    - name: Build and start HomeCoin stack
+      ansible.builtin.command:
+        cmd: docker compose up -d --build
+        chdir: "{{ homecoin_dir }}"
+      register: compose_up
+      changed_when: compose_up.rc == 0
+
+    - name: Wait for HomeCoin health endpoint
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}/health"
+        validate_certs: false
+        return_content: true
+        status_code: 200
+      register: health
+      until: health.json.status | default('') == 'ok'
+      retries: 36
+      delay: 10
+
+    - name: Show deployment URL
+      ansible.builtin.debug:
+        msg: "HomeCoin is running at https://{{ ansible_host }}/"

@@ -1,13 +1,10 @@
-# Provision Azure infrastructure for HomeCoin (ACR, Container Apps, PostgreSQL).
+# Provision Azure infrastructure for HomeCoin (Terraform).
 #
 # Run once per environment (or when infra changes), then use cd-azure.yml for app releases.
 #
 # Required repository secrets:
 #   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
 #   POSTGRES_ADMIN_PASSWORD  (min 8 chars, mixed case + numbers)
-#   JWT_SECRET               (long random string)
-#   SUPERKIT_SECRET          (32+ characters)
-#   WORKER_INTERNAL_TOKEN    (shared API ↔ Worker auth token)
 #
 # Required repository variables:
 #   AZURE_RESOURCE_GROUP
@@ -40,7 +37,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy Bicep
+    name: Deploy Terraform
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -53,6 +50,11 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
       - name: Ensure resource group exists
         run: |
           echo "Deploying to region: ${{ vars.AZURE_LOCATION }}"
@@ -63,8 +65,6 @@ jobs:
 
       - name: Verify Azure resource providers
         run: |
-          # Provider registration requires subscription Owner/Contributor (human account).
-          # GitHub SP cannot register — only verify status and wait if still registering.
           for ns in Microsoft.App Microsoft.ContainerRegistry Microsoft.DBforPostgreSQL Microsoft.OperationalInsights; do
             state=$(az provider show --namespace "$ns" --query registrationState -o tsv 2>/dev/null || echo "Unknown")
             echo "$ns: $state"
@@ -84,42 +84,50 @@ jobs:
           done
           echo "All required providers are Registered."
 
-      - name: Deploy infrastructure
+      - name: Terraform init
+        working-directory: infra/terraform/homecoin
+        run: terraform init -input=false
+
+      - name: Terraform apply (base infra)
         id: deploy
+        working-directory: infra/terraform/homecoin
+        env:
+          TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
         run: |
-          DEPLOYMENT_NAME="homecoin-infra-$(date +%Y%m%d%H%M%S)"
           RG_LOCATION=$(az group show --name "${{ vars.AZURE_RESOURCE_GROUP }}" --query location -o tsv)
           echo "Resource group location: $RG_LOCATION"
 
-          az deployment group create \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --name "$DEPLOYMENT_NAME" \
-            --template-file infra/azure/main.bicep \
-            --parameters \
-              appName="${{ inputs.app_name }}" \
-              location="$RG_LOCATION" \
-              postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
-            --query properties.outputs \
-            --output json > deployment-outputs.json
+          terraform apply -auto-approve -input=false \
+            -var="app_name=${{ inputs.app_name }}" \
+            -var="resource_group_name=${{ vars.AZURE_RESOURCE_GROUP }}" \
+            -var="location=$RG_LOCATION" \
+            -var="deploy_apps=false" \
+            -var="min_replicas=${{ inputs.min_replicas }}" \
+            -var="max_replicas=${{ inputs.max_replicas }}"
 
-          echo "acr_name=$(jq -r '.acrName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "container_app=$(jq -r '.containerAppName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "worker_app=$(jq -r '.workerAppName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "container_env=$(jq -r '.containerEnvName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "postgres_server=$(jq -r '.postgresServerName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          terraform output -json > ../../../deployment-outputs.json
+
+      - name: Export outputs
+        id: outputs
+        run: |
+          echo "acr_name=$(jq -r '.acr_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "container_app=$(jq -r '.container_app_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "worker_app=$(jq -r '.worker_app_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "container_env=$(jq -r '.container_env_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "postgres_server=$(jq -r '.postgres_server_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         run: |
           {
-            echo "### Azure infrastructure deployed"
+            echo "### Azure infrastructure deployed (Terraform)"
             echo ""
             echo "| Setting | Value |"
             echo "|---------|-------|"
             echo "| Resource group | \`${{ vars.AZURE_RESOURCE_GROUP }}\` |"
-            echo "| ACR name | \`${{ steps.deploy.outputs.acr_name }}\` |"
-            echo "| Container Apps Environment | \`${{ steps.deploy.outputs.container_env }}\` |"
-            echo "| API app name (for CD) | \`${{ steps.deploy.outputs.container_app }}\` |"
-            echo "| Worker app name (for CD) | \`${{ steps.deploy.outputs.worker_app }}\` |"
+            echo "| ACR name | \`${{ steps.outputs.outputs.acr_name }}\` |"
+            echo "| Container Apps Environment | \`${{ steps.outputs.outputs.container_env }}\` |"
+            echo "| API app name (for CD) | \`${{ steps.outputs.outputs.container_app }}\` |"
+            echo "| Worker app name (for CD) | \`${{ steps.outputs.outputs.worker_app }}\` |"
             echo ""
             echo "Set variables \`AZURE_ACR_NAME\`, \`AZURE_CONTAINER_APP\`, \`AZURE_WORKER_APP\`, then run **CD — Azure** to deploy apps."
           } >> "$GITHUB_STEP_SUMMARY"

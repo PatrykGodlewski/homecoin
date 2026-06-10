@@ -1,0 +1,77 @@
+# HomeCoin na Azure VM: Terraform (infrastruktura) + Ansible (Docker Compose).
+
+name: Deploy HomeCoin VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: Azure resource group
+        required: false
+        default: rg-homecoin-vm
+        type: string
+      location:
+        description: Azure region
+        required: false
+        default: westeurope
+        type: string
+      action:
+        description: apply or destroy
+        required: false
+        default: apply
+        type: choice
+        options:
+          - apply
+          - destroy
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Terraform + Ansible
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Deploy HomeCoin
+        env:
+          AZURE_RESOURCE_GROUP: ${{ inputs.resource_group }}
+          AZURE_LOCATION: ${{ inputs.location }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SUPERKIT_SECRET: ${{ secrets.SUPERKIT_SECRET }}
+          WORKER_INTERNAL_TOKEN: ${{ secrets.WORKER_INTERNAL_TOKEN }}
+        run: |
+          chmod +x scripts/deploy-homecoin.sh
+          ./scripts/deploy-homecoin.sh "${{ inputs.action }}"
+
+      - name: Summary
+        if: inputs.action == 'apply'
+        run: |
+          {
+            echo "### HomeCoin deployed on Azure VM"
+            echo ""
+            terraform -chdir=infra/terraform/vm output app_urls
+          } >> "$GITHUB_STEP_SUMMARY"

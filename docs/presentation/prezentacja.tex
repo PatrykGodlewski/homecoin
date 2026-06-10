@@ -45,6 +45,10 @@
 }
 \date{14 czerwca 2026}
 
+\renewcommand{\contentsname}{Spis treści}
+\renewcommand{\sectionname}{Sekcja}
+\renewcommand{\subsectionname}{Podsekcja}
+
 % --- strona tytułowa (formularz uczelni) — uzupełnij przed drukiem ---
 \newcommand{\formline}[1]{\leavevmode\hbox to #1{\dotfill\hss}}
 \newcommand{\tytulowapage}{%
@@ -94,7 +98,7 @@
 
 \tytulowapage
 
-\begin{frame}{Agenda}
+\begin{frame}{Plan prezentacji}
   \tableofcontents
 \end{frame}
 
@@ -106,20 +110,20 @@
   \vspace{0.6em}
   \begin{columns}[T]
     \column{0.48\textwidth}
-    \textbf{Stack technologiczny}
+    \textbf{Stos technologiczny}
     \begin{itemize}
       \item Go 1.25, PostgreSQL
-      \item Superkit + Templ + HTMX (UI)
+      \item Superkit + Templ + HTMX (interfejs)
       \item REST API \texttt{/api/v1}
-      \item Azure Container Apps
+      \item Azure Container Apps (chmura)
     \end{itemize}
 
     \column{0.48\textwidth}
-    \textbf{Linki}
+    \textbf{Odnośniki}
     \begin{itemize}
-      \item \href{https://github.com/PatrykGodlewski/homecoin}{GitHub --- kod + README}
-      \item \href{https://github.com/PatrykGodlewski/homecoin/blob/main/docs/OCENA.md}{docs/OCENA.md}
-      \item \href{https://homecoin-api.agreeablerock-d7dc1820.uaenorth.azurecontainerapps.io/health}{Azure --- wdrożenie live}
+      \item \href{https://github.com/PatrykGodlewski/homecoin}{GitHub --- kod źródłowy}
+      \item \href{https://github.com/PatrykGodlewski/homecoin/blob/main/docs/OCENA.md}{Mapowanie kryteriów oceny}
+      \item \href{https://homecoin-api.ashyocean-93c64f80.uaenorth.azurecontainerapps.io/health}{Azure --- działające wdrożenie}
     \end{itemize}
   \end{columns}
 
@@ -141,7 +145,7 @@
     \addlinespace
     Wdrożenie w chmurze &
     Azure: Container Apps + PostgreSQL Flexible Server \\
-    & Infrastruktura jako kod: Terraform + Ansible (\texttt{infra/terraform/}) \\
+    & IaC: Terraform (\texttt{infra/terraform/}) + weryfikacja Ansible (\texttt{infra/ansible/}) \\
     \addlinespace
     Potok CI/CD &
     GitHub Actions: \texttt{ci.yml}, \texttt{cd-azure.yml}, \texttt{azure-infra.yml} \\
@@ -150,7 +154,7 @@
 
   \vspace{0.5em}
   \normalsize
-  \textbf{Demonstracja:} push na \texttt{main} $\rightarrow$ CI $\rightarrow$ CD (ACR $\rightarrow$ Azure).
+  \textbf{Demonstracja:} push na \texttt{main} $\rightarrow$ CI $\rightarrow$ CD (rejestr ACR $\rightarrow$ Azure).
 \end{frame}
 
 \begin{frame}{dst --- przepływ CI/CD}
@@ -161,10 +165,10 @@
     box/.style={draw, rounded corners, minimum width=2.1cm, minimum height=0.75cm, align=center, font=\footnotesize},
     arr/.style={-{Stealth[length=2mm]}, thick}
   ]
-    \node[box, fill=blue!12] (git) {GitHub\\push main};
+    \node[box, fill=blue!12] (git) {GitHub\\push na main};
     \node[box, fill=green!12, right=of git] (ci) {CI\\testy, lint, build};
-    \node[box, fill=orange!12, right=of ci] (cd) {CD Azure\\ACR + deploy};
-    \node[box, fill=purple!12, right=of cd] (az) {Container Apps\\+ PostgreSQL};
+    \node[box, fill=orange!12, right=of ci] (cd) {CD Azure\\ACR + wdrożenie};
+    \node[box, fill=purple!12, right=of cd] (az) {Aplikacje\\kontenerowe + PG};
     \draw[arr] (git) -- (ci);
     \draw[arr] (ci) -- (cd);
     \draw[arr] (cd) -- (az);
@@ -173,9 +177,9 @@
 
   \vspace{0.8em}
   \begin{itemize}
-    \item \textbf{CI} (\texttt{.github/workflows/ci.yml}): testy, \texttt{go vet}, build, Docker, E2E
-    \item \textbf{CD} (\texttt{cd-azure.yml}): obrazy \texttt{api} + \texttt{worker}, Terraform + Ansible
-    \item \textbf{Infra} (\texttt{azure-infra.yml}): RG, ACR, PostgreSQL, Container Apps Environment
+    \item \textbf{CI} (\texttt{ci.yml}): testy jednostkowe, \texttt{go vet}, kompilacja, Docker, testy E2E
+    \item \textbf{CD} (\texttt{cd-azure.yml}): obrazy w ACR $\rightarrow$ Terraform (Container Apps) $\rightarrow$ Ansible (\texttt{/health})
+    \item \textbf{Infrastruktura} (\texttt{azure-infra.yml}, ręcznie): grupa zasobów, ACR, PostgreSQL, środowisko Container Apps
   \end{itemize}
 \end{frame}
 
@@ -188,7 +192,7 @@
     \textbf{Aspekt} & \textbf{Implementacja} \\
     \midrule
     HTTPS &
-    Nginx + TLS (\texttt{deploy/docker/nginx/}); Azure ingress wymusza HTTPS \\
+    Nginx + TLS lokalnie (\texttt{deploy/docker/nginx/}); na Azure ingress wymusza HTTPS \\
     \addlinespace
     Hasła &
     bcrypt --- \texttt{HashPassword}, \texttt{CheckPassword} \\
@@ -203,7 +207,7 @@
     PostgreSQL Azure: \texttt{sslmode=require} \\
     \addlinespace
     Usługi wewnętrzne &
-    Token \texttt{X-Worker-Token} (API $\rightarrow$ Worker) \\
+    Token \texttt{X-Worker-Token} (komunikacja API $\rightarrow$ worker) \\
     \bottomrule
   \end{tabular}
 \end{frame}
@@ -218,7 +222,7 @@ curl -k https://127.0.0.1:8081/health
 
   \textbf{Na Azure:}
   \begin{lstlisting}
-curl https://homecoin-api....azurecontainerapps.io/health
+curl https://homecoin-api.ashyocean-93c64f80.uaenorth.azurecontainerapps.io/health
   \end{lstlisting}
 
   Odpowiedź: \verb|{"status":"ok"}|
@@ -230,7 +234,7 @@ curl https://homecoin-api....azurecontainerapps.io/health
 \section{Ocena db}
 
 \begin{frame}{db --- Docker Compose}
-  \textbf{Plik:} \texttt{docker-compose.yml} --- 4 kontenery, healthchecki, \texttt{depends\_on}.
+  \textbf{Plik:} \texttt{docker-compose.yml} --- 5 kontenerów (postgres, migrate, api, worker, nginx), healthchecki, \texttt{depends\_on}.
 
   \vspace{0.5em}
   \centering
@@ -240,9 +244,10 @@ curl https://homecoin-api....azurecontainerapps.io/health
     \textbf{Kontener} & \textbf{Rola} & \textbf{Port (host)} \\
     \midrule
     \texttt{postgres} & Baza danych & 5433 \\
-    \texttt{api} & REST API + UI & wewn.\ 8080 \\
+    \texttt{migrate} & Migracje schematu (jednorazowo) & --- \\
+    \texttt{api} & REST API + interfejs & wewn.\ 8080 \\
     \texttt{worker} & Zadania w tle & wewn.\ 8080 \\
-    \texttt{nginx} & TLS, proxy & 8081 (HTTPS) \\
+    \texttt{nginx} & TLS, reverse proxy & 8081 (HTTPS) \\
     \bottomrule
   \end{tabular}
 
@@ -263,10 +268,10 @@ curl https://homecoin-api....azurecontainerapps.io/health
   ]
     \node[svc, fill=orange!15] (nginx) {nginx\\port 443};
     \node[svc, fill=blue!15, below=of nginx] (api) {api\\REST + UI + SSE};
-    \node[svc, fill=green!15, left=of api] (worker) {worker\\recalc, budżety};
+    \node[svc, fill=green!15, left=of api] (worker) {worker\\salda, budżety};
     \node[svc, fill=gray!15, right=of api] (pg) {postgres};
     \draw[arr] (nginx) -- node[right, font=\tiny] {proxy} (api);
-    \draw[arr] (api) -- node[above, font=\tiny, align=center] {POST\\recalculate} (worker);
+    \draw[arr] (api) -- node[above, font=\tiny, align=center] {POST\\przeliczanie} (worker);
     \draw[arr] (api) -- (pg);
     \draw[arr] (worker) -- (pg);
   \end{tikzpicture}%
@@ -274,9 +279,9 @@ curl https://homecoin-api....azurecontainerapps.io/health
 
   \vspace{0.4em}
   \begin{itemize}
-    \item \textbf{api} (\texttt{cmd/api/main.go}) --- CRUD, UI, outbox $\rightarrow$ SSE
+    \item \textbf{api} (\texttt{cmd/api/main.go}) --- operacje CRUD, interfejs, outbox $\rightarrow$ SSE
     \item \textbf{worker} (\texttt{cmd/worker/main.go}) --- salda, budżety, przypomnienia
-    \item Komunikacja HTTP + wspólna baza PostgreSQL
+    \item Komunikacja HTTP + wspólna baza danych PostgreSQL
   \end{itemize}
 \end{frame}
 
@@ -286,13 +291,13 @@ curl https://homecoin-api....azurecontainerapps.io/health
   \small
   \begin{tabular}{@{}lll@{}}
     \toprule
-    \textbf{Typ} & \textbf{Lokalizacja} & \textbf{CI (job)} \\
+    \textbf{Typ} & \textbf{Lokalizacja} & \textbf{Zadanie w CI} \\
     \midrule
-    Jednostkowe (domena) & \texttt{internal/domain/service/} & Unit tests \\
-    Jednostkowe (auth) & \texttt{internal/infrastructure/auth/} & Unit tests \\
-    Jednostkowe (worker) & \texttt{internal/infrastructure/workerclient/} & Unit tests \\
-    E2E smoke (bash) & \texttt{scripts/ci/smoke\_test.sh} & \textbf{E2E tests} \\
-    E2E (Go) & \texttt{test/e2e/api\_test.go} & \textbf{E2E tests} \\
+    Jednostkowe (domena) & \texttt{internal/domain/service/} & Testy jednostkowe \\
+    Jednostkowe (auth) & \texttt{internal/infrastructure/auth/} & Testy jednostkowe \\
+    Jednostkowe (worker) & \texttt{internal/infrastructure/workerclient/} & Testy jednostkowe \\
+    E2E smoke (bash) & \texttt{scripts/ci/smoke\_test.sh} & \textbf{Testy E2E} \\
+    E2E (Go) & \texttt{test/e2e/api\_test.go} & \textbf{Testy E2E} \\
     \bottomrule
   \end{tabular}
 
@@ -304,7 +309,7 @@ curl https://homecoin-api....azurecontainerapps.io/health
 \begin{frame}[fragile]{bdb --- gdzie to zobaczyć}
   \textbf{GitHub Actions:} \\
   \href{https://github.com/PatrykGodlewski/homecoin/actions}{github.com/PatrykGodlewski/homecoin/actions}
-  $\rightarrow$ workflow \textbf{CI} $\rightarrow$ job \textbf{E2E tests}
+  $\rightarrow$ workflow \textbf{CI} $\rightarrow$ zadanie \textbf{E2E tests} (testy end-to-end)
 
   \vspace{0.6em}
   \textbf{Lokalnie:}
@@ -322,11 +327,11 @@ make e2e
     \toprule
     \textbf{Ocena} & & \textbf{Kluczowy dowód} \\
     \midrule
-    dst   & $\checkmark$ & CRUD API, Azure deploy, GitHub Actions \\
-    dst+  & $\checkmark$ & HTTPS, bcrypt, nagłówki, TLS do DB \\
-    db    & $\checkmark$ & \texttt{docker-compose.yml} --- 4 kontenery \\
+    dst   & $\checkmark$ & API CRUD, wdrożenie Azure, GitHub Actions \\
+    dst+  & $\checkmark$ & HTTPS, bcrypt, nagłówki, TLS do bazy \\
+    db    & $\checkmark$ & \texttt{docker-compose.yml} --- stos Docker Compose \\
     db+   & $\checkmark$ & \texttt{api} + \texttt{worker}, HTTP + outbox \\
-    bdb   & $\checkmark$ & \texttt{go test ./...} + E2E w \texttt{ci.yml} \\
+    bdb   & $\checkmark$ & \texttt{go test ./...} + testy E2E w \texttt{ci.yml} \\
     \bottomrule
   \end{tabular}
 
@@ -339,13 +344,13 @@ make e2e
 
 \begin{frame}{Plan demonstracji (10--12 min)}
   \begin{enumerate}
-    \item Strona tytułowa + agenda
-    \item Krótki opis HomeCoin (UI + API)
+    \item Strona tytułowa + plan prezentacji
+    \item Krótki opis HomeCoin (interfejs + API)
     \item \textbf{dst}: GitHub Actions $\rightarrow$ CI $\rightarrow$ CD $\rightarrow$ \texttt{/health} na Azure
     \item \textbf{dst+}: HTTPS, bcrypt
-    \item \textbf{db/db+}: \texttt{docker compose ps} --- 4 kontenery
-    \item \textbf{bdb}: job \textbf{E2E tests} w Actions
-    \item Podsumowanie + Q\&A
+    \item \textbf{db/db+}: \texttt{docker compose ps} --- postgres, api, worker, nginx (+ migrate)
+    \item \textbf{bdb}: zadanie \textbf{E2E tests} w GitHub Actions
+    \item Podsumowanie + pytania i odpowiedzi
   \end{enumerate}
 \end{frame}
 

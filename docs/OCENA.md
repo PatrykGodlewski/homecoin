@@ -7,7 +7,7 @@ Dokument opisuje, w jaki sposób projekt spełnia wymagania oceny od **dst** do 
 | Wymaganie | Implementacja |
 |-----------|---------------|
 | Operacje CRUD | REST API: wydatki, budżety, kategorie, skarbonki, rozliczenia (`/api/v1/households/{id}/...`) |
-| Wdrożenie w chmurze | Azure Container Apps + PostgreSQL Flexible Server (`infra/azure/main.bicep`) |
+| Wdrożenie w chmurze | Azure Container Apps + PostgreSQL — Terraform (`infra/terraform/homecoin/`) + Ansible (`infra/ansible/`) |
 | Potok CI/CD | GitHub Actions: `.github/workflows/ci.yml`, `cd-azure.yml`, `azure-infra.yml` |
 
 **Demonstracja:** push do `main` → CI (testy, build) → CD (build obrazów w ACR, deploy na Azure).
@@ -18,7 +18,7 @@ Dokument opisuje, w jaki sposób projekt spełnia wymagania oceny od **dst** do 
 
 | Aspekt | Implementacja |
 |--------|---------------|
-| HTTPS w transmisji | Nginx reverse proxy z TLS (`deploy/nginx/`), Azure Container Apps wymusza HTTPS na ingress |
+| HTTPS w transmisji | Nginx reverse proxy z TLS (`deploy/docker/nginx/`), Azure Container Apps wymusza HTTPS na ingress |
 | Szyfrowanie haseł | bcrypt (`internal/infrastructure/auth/jwt.go` — `HashPassword`, `CheckPassword`) |
 | Tokeny JWT | Podpis HMAC-SHA256, refresh tokeny hashowane SHA-256 przed zapisem w DB |
 | Nagłówki bezpieczeństwa | HSTS, X-Frame-Options, X-Content-Type-Options (`middleware.SecurityHeaders`) |
@@ -27,7 +27,7 @@ Dokument opisuje, w jaki sposób projekt spełnia wymagania oceny od **dst** do 
 
 **Demonstracja lokalna:**
 ```bash
-./deploy/nginx/generate-certs.sh
+./deploy/docker/nginx/generate-certs.sh
 docker compose up --build
 curl -k https://localhost:8081/health
 ```
@@ -79,14 +79,14 @@ make docker-api
 | E2E API (Go) | `test/e2e/api_test.go` (`-tags=e2e`) | job **E2E tests** w `ci.yml` |
 | E2E UI (Go, HTTP) | `test/e2e/ui_test.go` — formularze HTML, sesja cookie | job **E2E tests** w `ci.yml` |
 | E2E UI (Playwright) | `test/e2e/playwright_test.go` — Chromium, pełny flow UI | job **E2E tests** w `ci.yml` |
-| E2E (smoke) | `scripts/smoke_test.sh` | job **E2E tests** w `ci.yml` |
+| E2E (smoke) | `scripts/ci/smoke_test.sh` | job **E2E tests** w `ci.yml` |
 
 **Gdzie zobaczyć w GitHub:** *Actions → workflow **CI** → otwórz run → job **E2E tests*** (ostatni job na liście).
 
 **Potok E2E w CI:**
 1. Generowanie certyfikatów TLS
 2. `docker compose up -d --build --wait` (pełny stack mikrousług)
-3. `./scripts/smoke_test.sh` (rejestracja → gospodarstwo → wydatek)
+3. `./scripts/ci/smoke_test.sh` (rejestracja → gospodarstwo → wydatek)
 4. `go test -tags=e2e ./test/e2e/...` (REST API + pełny flow UI)
 
 **Uruchomienie lokalne:**

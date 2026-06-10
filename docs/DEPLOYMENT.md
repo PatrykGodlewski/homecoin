@@ -1,6 +1,22 @@
 # HomeCoin — wdrożenie na Azure i GitHub Actions
 
-Przewodnik krok po kroku: konfiguracja repozytorium GitHub, logowanie OIDC do Azure, infrastruktura (Bicep) i automatyczny deploy mikrousług.
+Przewodnik krok po kroku: konfiguracja repozytorium GitHub, logowanie OIDC do Azure, infrastruktura (Terraform) i automatyczny deploy mikrousług (Terraform + Ansible).
+
+## Dlaczego Terraform i Ansible?
+
+To dwa narzędzia IaC o **różnych rolach**, używane razem w potoku CI/CD:
+
+| Narzędzie | Rola | Co robi w HomeCoin |
+|-----------|------|---------------------|
+| **Terraform** | Infrastruktura (deklaratywna, ze stanem) | Tworzy i aktualizuje zasoby Azure: ACR, PostgreSQL, Container Apps Environment, Container Apps (`infra/terraform/homecoin/`) |
+| **Ansible** | Konfiguracja / wdrożenie aplikacji (bez stanu) | Po Terraform: wczytuje outputy, sprawdza health endpoint, pokazuje logi przy błędzie (`infra/ansible/playbooks/homecoin.yml`) |
+
+**Po co oba?** Możesz usunąć całą grupę zasobów (`az group delete`) i odtworzyć środowisko z repozytorium — bez ręcznego klikania w portalu Azure. Terraform odtwarza infrastrukturę, Ansible potwierdza, że aplikacja działa.
+
+```
+az group delete  →  Azure Infrastructure (Terraform)  →  CD (obrazy + Terraform + Ansible)
+     destroy              ACR, PostgreSQL, CAE              Container Apps + /health OK
+```
 
 ## Architektura wdrożenia
 
@@ -9,7 +25,7 @@ GitHub (push main)
     │
     ├─► CI workflow        — testy jednostkowe, lint, build, E2E
     │
-    └─► CD — Azure         — build obrazów w ACR → deploy Container Apps
+    └─► CD — Azure         — build obrazów → Terraform (Container Apps) → Ansible (weryfikacja)
             │
             ├─► homecoin-api      (publiczny HTTPS)
             ├─► homecoin-worker   (wewnętrzny, komunikacja z API)
@@ -22,8 +38,8 @@ Workflowi w repozytorium:
 | Plik | Kiedy się uruchamia | Co robi |
 |------|---------------------|---------|
 | `.github/workflows/ci.yml` | PR i push na `main` | Testy, lint, build Docker, E2E |
-| `.github/workflows/azure-infra.yml` | Ręcznie (workflow_dispatch) | Tworzy infrastrukturę Azure (Bicep) |
-| `.github/workflows/cd-azure.yml` | Push na `main` + ręcznie | Buduje i wdraża API + Worker |
+| `.github/workflows/azure-infra.yml` | Ręcznie (workflow_dispatch) | Terraform — infrastruktura bazowa (ACR, PostgreSQL, CAE) |
+| `.github/workflows/cd-azure.yml` | Push na `main` + ręcznie | Build obrazów + Terraform (Container Apps) + Ansible |
 
 ---
 
@@ -76,7 +92,7 @@ export GITHUB_REPO=homecoin
 export AZURE_RESOURCE_GROUP=rg-homecoin-prod
 export LOCATION=uaenorth
 
-./infra/azure/setup-github-oidc.sh
+./infra/bootstrap/setup-github-oidc.sh
 ```
 
 Skrypt:
@@ -129,68 +145,77 @@ openssl rand -hex 24   # WORKER_INTERNAL_TOKEN
 |-------|------|----------|
 | `AZURE_RESOURCE_GROUP` | Nazwa grupy zasobów | `rg-homecoin-prod` |
 | `AZURE_LOCATION` | Region Azure | `uaenorth` |
-| `AZURE_ACR_NAME` | Nazwa Container Registry | *(po kroku 5)* |
-| `AZURE_CONTAINER_APP` | Nazwa Container App API | *(po kroku 5)* |
-| `AZURE_WORKER_APP` | Nazwa Container App Worker | *(po kroku 5)* |
 
-Zmienne `AZURE_ACR_NAME`, `AZURE_CONTAINER_APP`, `AZURE_WORKER_APP` uzupełnisz po pierwszym wdrożeniu infrastruktury.
+Opcjonalnie: `AZURE_ACR_NAME` — CD wykrywa ACR automatycznie z grupy zasobów.
+
+---
+
+## Reset — usuń wszystko i zacznij od zera
+
+### 1. Usuń całą grupę zasobów w Azure
+
+```bash
+az login
+az group delete --name rg-homecoin-prod --yes --no-wait
+```
+
+Poczekaj 5–15 minut, aż usunięcie się zakończy (`az group show -n rg-homecoin-prod` → błąd *not found*).
+
+### 2. Odtwórz platformę (Terraform)
+
+*Actions → **Azure Infrastructure** → Run workflow*
+
+- Zostaw **`fresh_start: true`** (domyślnie włączone po usunięciu RG)
+- Tworzy: ACR, PostgreSQL, Log Analytics, Container Apps Environment
+
+Sekrety i zmienne w GitHub (`POSTGRES_ADMIN_PASSWORD`, `AZURE_RESOURCE_GROUP`, …) **zostaw bez zmian**.
+
+### 3. Wdróż aplikację (CI/CD)
+
+```bash
+git push origin main
+```
+
+albo *Actions → **CD — Azure** → Run workflow* — buduje obrazy, Terraform (Container Apps), Ansible (health check).
 
 ---
 
 ## Krok 5 — Wdrożenie infrastruktury Azure
 
+Infrastruktura jest definiowana wyłącznie w **Terraform** (`infra/terraform/homecoin/`).
+
 ### Przez GitHub Actions (zalecane)
 
 1. *Actions → **Azure Infrastructure** → Run workflow*
 2. Parametry (domyślne są OK):
+   - `fresh_start`: `true` po `az group delete`, `false` przy aktualizacji
    - `app_name`: `homecoin`
-   - `min_replicas`: `0` (scale-to-zero) lub `1` (zawsze włączony)
-   - `max_replicas`: `2`
-3. Poczekaj na zielony status joba.
-4. W **Summary** joba skopiuj:
-   - ACR name → `AZURE_ACR_NAME`
-   - API Container App → `AZURE_CONTAINER_APP`
-   - Worker Container App → `AZURE_WORKER_APP`
-5. Wklej je w *Settings → Variables*.
+   - `min_replicas` / `max_replicas`: używane później przez CD
+3. Poczekaj na zielony status joba — w **Summary** zobaczysz nazwy ACR i PostgreSQL.
 
-### Alternatywnie — lokalnie przez Azure CLI
+### Alternatywnie — lokalnie (Terraform)
 
 ```bash
 az group create --name rg-homecoin-prod --location uaenorth
 
-export POSTGRES_ADMIN_PASSWORD='...'
-export JWT_SECRET='...'
-export SUPERKIT_SECRET='...'
-export WORKER_INTERNAL_TOKEN='...'
+export TF_VAR_postgres_admin_password='...'
 
-az deployment group create \
-  --resource-group rg-homecoin-prod \
-  --template-file infra/azure/main.bicep \
-  --parameters \
-    appName=homecoin \
-    location=uaenorth \
-    postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" \
-    jwtSecret="$JWT_SECRET" \
-    superkitSecret="$SUPERKIT_SECRET" \
-    workerInternalToken="$WORKER_INTERNAL_TOKEN" \
-    usePlaceholderImage=true
+cd infra/terraform/homecoin
+terraform init
+terraform apply \
+  -var="resource_group_name=rg-homecoin-prod" \
+  -var="location=uaenorth" \
+  -var="deploy_apps=false"
+terraform output
 ```
 
-Outputy deploymentu:
-
-```bash
-az deployment group show \
-  --resource-group rg-homecoin-prod \
-  --name <DEPLOYMENT_NAME> \
-  --query properties.outputs
-```
-
-Infrastruktura tworzy:
+Workflow **Azure Infrastructure** tworzy:
 - Azure Container Registry (ACR)
 - Container Apps Environment
-- Container App **homecoin-api** (publiczny HTTPS)
-- Container App **homecoin-worker** (wewnętrzny ingress)
-- PostgreSQL Flexible Server 16 (połączenie TLS)
+- PostgreSQL Flexible Server 16 (TLS)
+- Log Analytics
+
+Container Apps (`homecoin-api`, `homecoin-worker`) wdraża **CD — Azure**.
 
 ---
 
@@ -206,11 +231,10 @@ git push origin main
 ```
 
 Workflow:
-1. Loguje się do Azure (OIDC)
-2. Buduje obraz `homecoin-api` w ACR (`az acr build --target api`)
-3. Buduje obraz `homecoin-worker` w ACR (`az acr build --target worker`)
-4. Aktualizuje Container App workera, potem API
-5. Sprawdza `https://<fqdn>/health`
+1. Loguje się do Azure (OIDC), przywraca stan Terraform z cache
+2. Buduje i pushuje obrazy `homecoin-api` i `homecoin-worker` do ACR (`docker build`)
+3. Terraform (`deploy_apps=true`) tworzy/aktualizuje Container Apps
+4. Ansible weryfikuje wdrożenie (`https://<fqdn>/health`)
 
 ### Weryfikacja
 
@@ -283,8 +307,8 @@ az role assignment create \
 Subskrypcja nie ma zarejestrowanych providerów Azure. Uruchom **raz** lokalnie (własne konto Azure, nie GitHub SP):
 
 ```bash
-chmod +x infra/azure/register-providers.sh
-./infra/azure/register-providers.sh
+chmod +x infra/bootstrap/register-providers.sh
+./infra/bootstrap/register-providers.sh
 ```
 
 Lub ręcznie:
@@ -318,7 +342,7 @@ GitHub Environment Variable: `AZURE_LOCATION` = `uaenorth`
 
 ### `Authorization failed ... roleAssignments/write`
 
-Bicep nadaje rolę **AcrPull** Container Apps wobec ACR — wymaga to uprawnienia `Microsoft.Authorization/roleAssignments/write`.
+Terraform może nadawać rolę **AcrPull** Container Apps wobec ACR — wymaga to uprawnienia `Microsoft.Authorization/roleAssignments/write`. CD używa konta admin ACR zamiast RBAC (kompatybilność z Azure for Students).
 Rola **Contributor** tego nie obejmuje.
 
 Naprawa — nadaj aplikacji GitHub rolę **User Access Administrator** na grupie zasobów:
@@ -374,7 +398,7 @@ export APP_ID="<AZURE_CLIENT_ID>"
 export GITHUB_ORG=PatrykGodlewski
 export GITHUB_REPO=homecoin
 export AZURE_RESOURCE_GROUP=rg-homecoin-prod
-./infra/azure/setup-github-oidc.sh
+./infra/bootstrap/setup-github-oidc.sh
 ```
 
 ### `Azure login` / OIDC failed (inne)
@@ -382,10 +406,6 @@ export AZURE_RESOURCE_GROUP=rg-homecoin-prod
 - Sprawdź `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
 - Federated credentials muszą obejmować `repo:ORG/REPO:environment:production` oraz `repo:ORG/REPO:ref:refs/heads/main`.
 - Aplikacja musi mieć rolę Contributor na grupie zasobów.
-
-### `az acr build` — registry not found
-
-- Ustaw `AZURE_ACR_NAME` dokładnie jak w outputcie infra (bez `.azurecr.io`).
 
 ### Health check failed po deploy
 
@@ -408,13 +428,9 @@ Typowe przyczyny:
 - Błąd migracji DB → sprawdź `DATABASE_URL` i hasło PostgreSQL
 - Brak `SUPERKIT_SECRET` (min. 32 znaki)
 
-### Container App pokazuje placeholder (Microsoft quickstart)
-
-Po pierwszym deployu CD obrazy z ACR zastąpią placeholder. Uruchom **CD — Azure** ponownie.
-
 ### Ponowne wdrożenie infrastruktury
 
-Workflow infra używa `usePlaceholderImage=true` — po redeploy infrastruktury uruchom **CD — Azure**, żeby przywrócić właściwe obrazy.
+Po zmianach w `infra/terraform/` uruchom **Azure Infrastructure** (`fresh_start: false`). Po zmianach w aplikacji wystarczy push na `main` (CD).
 
 ---
 
@@ -439,6 +455,5 @@ Wyłącz zasoby po demo: usuń grupę zasobów `az group delete --name rg-homeco
 - [ ] 7 sekretów ustawionych w GitHub
 - [ ] Zmienne `AZURE_RESOURCE_GROUP`, `AZURE_LOCATION`
 - [ ] Workflow **Azure Infrastructure** — sukces
-- [ ] Zmienne `AZURE_ACR_NAME`, `AZURE_CONTAINER_APP`, `AZURE_WORKER_APP`
 - [ ] Workflow **CD — Azure** — sukces
 - [ ] `curl https://<fqdn>/health` zwraca `ok`

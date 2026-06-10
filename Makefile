@@ -1,4 +1,4 @@
-.PHONY: run test build setup dev docker-up docker-down docker-api docker-certs lint migrate-up templ seed e2e e2e-go e2e-playwright-install
+.PHONY: run test build setup dev docker-up docker-down docker-api docker-certs lint templ seed migrations migrate e2e e2e-go e2e-playwright-install
 
 E2E_BASE_URL ?= https://127.0.0.1:8081
 E2E_TAGS ?= e2e,playwright
@@ -6,9 +6,17 @@ E2E_TAGS ?= e2e,playwright
 run: templ
 	go run ./cmd/api
 
-build: templ
+migrations:
+	@chmod +x scripts/dev/sync-migrations.sh
+	@./scripts/dev/sync-migrations.sh
+
+migrate: migrations
+	go run ./cmd/migrate
+
+build: templ migrations
 	go build -o bin/homecoin-api ./cmd/api
 	go build -o bin/homecoin-worker ./cmd/worker
+	go build -o bin/homecoin-migrate ./cmd/migrate
 
 worker:
 	go run ./cmd/worker
@@ -18,19 +26,19 @@ templ:
 	templ generate ./internal/ui/views/...
 
 seed:
-	@command -v go >/dev/null 2>&1 && go run ./cmd/seed || ./scripts/seed_db.sh
+	@command -v go >/dev/null 2>&1 && go run ./cmd/seed || ./scripts/dev/seed_db.sh
 
 test:
 	go test ./... -count=1
 
 e2e: docker-certs
 	docker compose up -d --build --wait
-	BASE_URL=$(E2E_BASE_URL) ./scripts/smoke_test.sh
+	BASE_URL=$(E2E_BASE_URL) ./scripts/ci/smoke_test.sh
 	$(MAKE) e2e-go
 
 e2e-playwright-install:
-	@chmod +x scripts/install-playwright.sh
-	@./scripts/install-playwright.sh
+	@chmod +x scripts/ci/install-playwright.sh
+	@./scripts/ci/install-playwright.sh
 
 e2e-go:
 	@command -v go >/dev/null 2>&1 && \
@@ -53,8 +61,8 @@ e2e-go-docker:
 		sh -c "go test -tags=e2e ./test/e2e/... -count=1 -v"
 
 docker-certs:
-	@chmod +x deploy/nginx/generate-certs.sh
-	@test -f deploy/nginx/certs/tls.crt || ./deploy/nginx/generate-certs.sh
+	@chmod +x deploy/docker/nginx/generate-certs.sh
+	@test -f deploy/docker/nginx/certs/tls.crt || ./deploy/docker/nginx/generate-certs.sh
 
 lint:
 	go vet ./...
@@ -66,6 +74,7 @@ setup:
 dev: setup docker-up
 	@echo "Waiting for PostgreSQL..."
 	@sleep 3
+	$(MAKE) migrate
 	$(MAKE) run
 
 docker-up:

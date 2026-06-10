@@ -30,7 +30,7 @@ Verify `.env` has `SUPERKIT_SECRET` (32+ chars) and `DATABASE_URL`.
 - [ ] 2. Handler — internal/adapter/handler/<feature>_handler.go or handlers.go
 - [ ] 3. Route — internal/adapter/handler/router.go under /api/v1
 - [ ] 4. Wire — cmd/api/main.go (construct UC, pass to handler.Deps)
-- [ ] 5. Test — curl or scripts/smoke_test.sh
+- [ ] 5. Test — curl or scripts/ci/smoke_test.sh
 ```
 
 **Handler pattern:**
@@ -184,7 +184,7 @@ valueobject.SplitEqual | SplitExact | SplitPercentage | SplitShares
 make test
 make build
 curl http://localhost:8081/health
-./scripts/smoke_test.sh
+./scripts/ci/smoke_test.sh
 # UI: open http://localhost:8081 after make run
 ```
 

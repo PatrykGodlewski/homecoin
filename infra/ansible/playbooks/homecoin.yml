@@ -1,115 +1,81 @@
 ---
-# Wdrożenie HomeCoin na VM: Docker + docker compose (api, worker, postgres, nginx).
-- name: Deploy HomeCoin application
-  hosts: webservers
-  become: true
+# Post-deploy verification for HomeCoin on Azure Container Apps.
+# Run after Terraform apply; vars come from Terraform outputs (generate_ansible_vars.py).
+
+- name: Verify HomeCoin on Azure Container Apps
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
   vars:
-    homecoin_dir: /opt/homecoin
-    source_archive: "{{ source_archive | default('') }}"
-    git_repo: "{{ git_repo | default('https://github.com/PatrykGodlewski/homecoin.git') }}"
-    git_version: "{{ git_version | default('main') }}"
-    deploy_method: "{{ deploy_method | default('archive') }}"
-    postgres_password: "{{ postgres_password | default('homecoin') }}"
+    resource_group: "{{ lookup('env', 'AZURE_RESOURCE_GROUP') }}"
+    api_app: "{{ container_app_name | default('homecoin-api') }}"
+    worker_app: "{{ worker_app_name | default('homecoin-worker') }}"
+
   tasks:
-    - name: Validate required secrets
+    - name: Require AZURE_RESOURCE_GROUP
       ansible.builtin.assert:
         that:
-          - jwt_secret is defined and (jwt_secret | length) >= 32
-          - superkit_secret is defined and (superkit_secret | length) >= 32
-          - worker_internal_token is defined and (worker_internal_token | length) >= 16
-        fail_msg: "Set jwt_secret, superkit_secret and worker_internal_token (min lengths 32/32/16)."
+          - resource_group | length > 0
+        fail_msg: "Set AZURE_RESOURCE_GROUP."
 
-    - name: Install Docker and dependencies
-      ansible.builtin.apt:
-        name:
-          - docker.io
-          - docker-compose-plugin
-          - git
-          - openssl
-          - rsync
-        state: present
-        update_cache: true
+    - name: Require API FQDN from Terraform outputs
+      ansible.builtin.assert:
+        that:
+          - container_app_fqdn is defined
+          - container_app_fqdn | length > 0
+        fail_msg: "container_app_fqdn missing — run Terraform apply with deploy_apps=true first."
 
-    - name: Enable and start Docker
-      ansible.builtin.service:
-        name: docker
-        state: started
-        enabled: true
+    - name: Show deployment targets
+      ansible.builtin.debug:
+        msg:
+          - "API:  https://{{ container_app_fqdn }}/"
+          - "Worker (internal): {{ worker_app_fqdn | default('n/a') }}"
 
-    - name: Add admin user to docker group
-      ansible.builtin.user:
-        name: "{{ ansible_user }}"
-        groups: docker
-        append: true
-
-    - name: Ensure application directory exists
-      ansible.builtin.file:
-        path: "{{ homecoin_dir }}"
-        state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: "0755"
-
-    - name: Deploy from source archive
-      when: deploy_method == 'archive'
-      block:
-        - name: Copy source archive to VM
-          ansible.builtin.copy:
-            src: "{{ source_archive }}"
-            dest: /tmp/homecoin-src.tgz
-            mode: "0644"
-
-        - name: Extract application source
-          ansible.builtin.unarchive:
-            src: /tmp/homecoin-src.tgz
-            dest: "{{ homecoin_dir }}"
-            remote_src: true
-            owner: "{{ ansible_user }}"
-            group: "{{ ansible_user }}"
-
-    - name: Deploy from Git repository
-      when: deploy_method == 'git'
-      block:
-        - name: Clone or update HomeCoin repository
-          ansible.builtin.git:
-            repo: "{{ git_repo }}"
-            dest: "{{ homecoin_dir }}"
-            version: "{{ git_version }}"
-            force: true
-          become_user: "{{ ansible_user }}"
-
-    - name: Write production environment file
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../templates/env.j2"
-        dest: "{{ homecoin_dir }}/.env"
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: "0600"
-
-    - name: Generate TLS certificates for nginx
+    - name: Wait for API Container App to be running
       ansible.builtin.command:
-        cmd: bash deploy/nginx/generate-certs.sh
-        chdir: "{{ homecoin_dir }}"
-      changed_when: true
+        cmd: >-
+          az containerapp show -g "{{ resource_group }}" -n "{{ api_app }}"
+          --query properties.runningStatus -o tsv
+      register: api_running
+      until: api_running.stdout | trim == "Running"
+      retries: 24
+      delay: 10
+      changed_when: false
+      failed_when: false
 
-    - name: Build and start HomeCoin stack
-      ansible.builtin.command:
-        cmd: docker compose up -d --build
-        chdir: "{{ homecoin_dir }}"
-      register: compose_up
-      changed_when: compose_up.rc == 0
-
-    - name: Wait for HomeCoin health endpoint
+    - name: Health check (HTTPS)
       ansible.builtin.uri:
-        url: "https://{{ ansible_host }}/health"
-        validate_certs: false
+        url: "https://{{ container_app_fqdn }}/health"
         return_content: true
         status_code: 200
       register: health
-      until: health.json.status | default('') == 'ok'
       retries: 36
       delay: 10
+      until: health.content is search('ok')
+      failed_when: false
 
-    - name: Show deployment URL
+    - name: Show API logs on health check failure
+      ansible.builtin.command:
+        cmd: az containerapp logs show -g "{{ resource_group }}" -n "{{ api_app }}" --tail 30
+      when: health.content is not search('ok')
+      changed_when: false
+      failed_when: false
+
+    - name: Show Worker logs on health check failure
+      ansible.builtin.command:
+        cmd: az containerapp logs show -g "{{ resource_group }}" -n "{{ worker_app }}" --tail 15
+      when: health.content is not search('ok')
+      changed_when: false
+      failed_when: false
+
+    - name: Fail when health check did not pass
+      ansible.builtin.fail:
+        msg: >-
+          Health check failed for https://{{ container_app_fqdn }}/health.
+          Verify POSTGRES_ADMIN_PASSWORD matches the PostgreSQL server password.
+      when: health.content is not search('ok')
+
+    - name: Deployment summary
       ansible.builtin.debug:
-        msg: "HomeCoin is running at https://{{ ansible_host }}/"
+        msg: "HomeCoin is running at https://{{ container_app_fqdn }}/"

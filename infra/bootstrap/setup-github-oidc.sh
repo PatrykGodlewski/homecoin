@@ -5,11 +5,11 @@
 #   export GITHUB_ORG=PatrykGodlewski
 #   export GITHUB_REPO=homecoin
 #   export AZURE_RESOURCE_GROUP=rg-homecoin-prod
-#   ./infra/azure/setup-github-oidc.sh
+#   ./infra/bootstrap/setup-github-oidc.sh
 #
 # To add credentials to an EXISTING app registration (after first run):
 #   export APP_ID=<AZURE_CLIENT_ID from GitHub secrets>
-#   ./infra/azure/setup-github-oidc.sh
+#   ./infra/bootstrap/setup-github-oidc.sh
 #
 # Requires: az CLI (logged in)
 
@@ -63,7 +63,7 @@ az role assignment create \
   --scope "$RG_ID" \
   --output none 2>/dev/null || true
 
-echo "==> Assigning User Access Administrator (required for Bicep ACR role assignments)"
+echo "==> Assigning User Access Administrator (required for Terraform ACR role assignments)"
 az role assignment create \
   --assignee "$APP_ID" \
   --role "User Access Administrator" \
@@ -88,4 +88,4 @@ echo "Add these GitHub repository variables:"
 echo "  AZURE_RESOURCE_GROUP=$AZURE_RESOURCE_GROUP"
 echo "  AZURE_LOCATION=$LOCATION"
 echo ""
-echo "After running 'Azure Infrastructure', set AZURE_ACR_NAME, AZURE_CONTAINER_APP, AZURE_WORKER_APP."
+echo "After running 'Azure Infrastructure', push to main or run 'CD — Azure' to deploy containers."

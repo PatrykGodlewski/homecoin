@@ -1,32 +1,35 @@
-# Provision Azure infrastructure for HomeCoin (Terraform).
+# Provision all Azure platform resources for HomeCoin (Terraform).
 #
-# Run once per environment (or when infra changes), then use cd-azure.yml for app releases.
+# Creates: resource group, ACR, PostgreSQL, Log Analytics, Container Apps Environment.
+# Container Apps (API + Worker) are deployed by CD — Azure after images are in ACR.
 #
-# Required repository secrets:
-#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
-#   POSTGRES_ADMIN_PASSWORD  (min 8 chars, mixed case + numbers)
+# After `az group delete`, run with fresh_start=true.
 #
-# Required repository variables:
-#   AZURE_RESOURCE_GROUP
-#   AZURE_LOCATION           e.g. uaenorth
+# Secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, POSTGRES_ADMIN_PASSWORD
+# Variables: AZURE_RESOURCE_GROUP, AZURE_LOCATION
 
 name: Azure Infrastructure
 
 on:
   workflow_dispatch:
     inputs:
+      fresh_start:
+        description: Clear Terraform state (required after az group delete)
+        required: false
+        default: true
+        type: boolean
       app_name:
         description: Resource name prefix
         required: false
         default: homecoin
         type: string
       min_replicas:
-        description: Container App minimum replicas (0 allows scale-to-zero)
+        description: Container App minimum replicas (used later by CD)
         required: false
-        default: "0"
+        default: "1"
         type: string
       max_replicas:
-        description: Container App maximum replicas
+        description: Container App maximum replicas (used later by CD)
         required: false
         default: "2"
         type: string
@@ -55,9 +58,20 @@ jobs:
         with:
           terraform_version: 1.9.0
 
+      - name: Clear Terraform state (fresh start)
+        if: inputs.fresh_start
+        run: rm -f infra/terraform/homecoin/terraform.tfstate*
+
+      - name: Restore Terraform state
+        if: ${{ !inputs.fresh_start }}
+        uses: actions/cache/restore@v4
+        with:
+          path: infra/terraform/homecoin/terraform.tfstate
+          key: terraform-state-v3-${{ vars.AZURE_RESOURCE_GROUP }}
+
       - name: Ensure resource group exists
         run: |
-          echo "Deploying to region: ${{ vars.AZURE_LOCATION }}"
+          echo "Region: ${{ vars.AZURE_LOCATION }}"
           az group create \
             --name "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --location "${{ vars.AZURE_LOCATION }}" \
@@ -78,7 +92,7 @@ jobs:
               done
             fi
             if [ "$state" != "Registered" ]; then
-              echo "::error::$ns is not Registered. Run locally: ./infra/azure/register-providers.sh"
+              echo "::error::$ns is not Registered. Run locally: ./infra/bootstrap/register-providers.sh"
               exit 1
             fi
           done
@@ -88,14 +102,13 @@ jobs:
         working-directory: infra/terraform/homecoin
         run: terraform init -input=false
 
-      - name: Terraform apply (base infra)
+      - name: Terraform apply (full platform)
         id: deploy
         working-directory: infra/terraform/homecoin
         env:
           TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
         run: |
           RG_LOCATION=$(az group show --name "${{ vars.AZURE_RESOURCE_GROUP }}" --query location -o tsv)
-          echo "Resource group location: $RG_LOCATION"
 
           terraform apply -auto-approve -input=false \
             -var="app_name=${{ inputs.app_name }}" \
@@ -105,29 +118,32 @@ jobs:
             -var="min_replicas=${{ inputs.min_replicas }}" \
             -var="max_replicas=${{ inputs.max_replicas }}"
 
-          terraform output -json > ../../../deployment-outputs.json
+          terraform output -json > deployment-outputs.json
+
+      - name: Save Terraform state
+        uses: actions/cache/save@v4
+        with:
+          path: infra/terraform/homecoin/terraform.tfstate
+          key: terraform-state-v3-${{ vars.AZURE_RESOURCE_GROUP }}
 
       - name: Export outputs
         id: outputs
         run: |
-          echo "acr_name=$(jq -r '.acr_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "container_app=$(jq -r '.container_app_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "worker_app=$(jq -r '.worker_app_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "container_env=$(jq -r '.container_env_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
-          echo "postgres_server=$(jq -r '.postgres_server_name.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "acr_name=$(jq -r '.acr_name.value' infra/terraform/homecoin/deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "container_env=$(jq -r '.container_env_name.value' infra/terraform/homecoin/deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "postgres_server=$(jq -r '.postgres_server_name.value' infra/terraform/homecoin/deployment-outputs.json)" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         run: |
           {
-            echo "### Azure infrastructure deployed (Terraform)"
+            echo "### Azure platform ready (Terraform)"
             echo ""
-            echo "| Setting | Value |"
-            echo "|---------|-------|"
+            echo "| Resource | Value |"
+            echo "|----------|-------|"
             echo "| Resource group | \`${{ vars.AZURE_RESOURCE_GROUP }}\` |"
-            echo "| ACR name | \`${{ steps.outputs.outputs.acr_name }}\` |"
+            echo "| ACR | \`${{ steps.outputs.outputs.acr_name }}\` |"
             echo "| Container Apps Environment | \`${{ steps.outputs.outputs.container_env }}\` |"
-            echo "| API app name (for CD) | \`${{ steps.outputs.outputs.container_app }}\` |"
-            echo "| Worker app name (for CD) | \`${{ steps.outputs.outputs.worker_app }}\` |"
+            echo "| PostgreSQL | \`${{ steps.outputs.outputs.postgres_server }}\` |"
             echo ""
-            echo "Set variables \`AZURE_ACR_NAME\`, \`AZURE_CONTAINER_APP\`, \`AZURE_WORKER_APP\`, then run **CD — Azure** to deploy apps."
+            echo "**Next:** push to \`main\` or run **CD — Azure** to build images and deploy the app."
           } >> "$GITHUB_STEP_SUMMARY"

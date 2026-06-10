@@ -36,6 +36,13 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if cfg.AutoMigrate {
+		if err := postgres.RunMigrations(cfg.DatabaseURL, log); err != nil {
+			log.Error("database migration failed", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Error("database connection failed", "error", err)

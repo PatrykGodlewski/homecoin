@@ -18,7 +18,7 @@ Household finance app: expense splitting, budgets, piggy banks, settlements, SSE
 | `make build` | Production binary → `bin/homecoin` |
 | `make test` | `go test ./...` |
 | `docker compose up --build` | Postgres + API (UI at `:8081`, API at `:8081/api/v1`) |
-| `./scripts/smoke_test.sh` | API smoke test |
+| `./scripts/ci/smoke_test.sh` | API smoke test |
 
 **Required env:** `DATABASE_URL`, `JWT_SECRET`, `SUPERKIT_SECRET` (32+ chars), `SUPERKIT_ENV` (`development`|`production`)
 
@@ -115,7 +115,10 @@ internal/
 public/
   assets/app.css             # UI styles
   embed.go                   # go:embed for production static files
-scripts/smoke_test.sh
+deploy/docker/nginx/          # Local Docker TLS (nginx)
+infra/                        # Terraform, Ansible, Azure bootstrap + deploy scripts
+scripts/ci/                   # smoke_test.sh, install-playwright.sh
+scripts/dev/                  # seed.sql, seed_db.sh
 ```
 
 ---

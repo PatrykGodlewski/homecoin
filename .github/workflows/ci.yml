@@ -136,7 +136,7 @@ jobs:
           cache: true
 
       - name: Generate TLS certificates
-        run: chmod +x deploy/nginx/generate-certs.sh && ./deploy/nginx/generate-certs.sh
+        run: chmod +x deploy/docker/nginx/generate-certs.sh && ./deploy/docker/nginx/generate-certs.sh
 
       - name: Start stack (microservices + HTTPS)
         run: docker compose up -d --build --wait --wait-timeout 300
@@ -157,12 +157,12 @@ jobs:
           exit 1
 
       - name: E2E smoke test (bash)
-        run: chmod +x scripts/smoke_test.sh && ./scripts/smoke_test.sh
+        run: chmod +x scripts/ci/smoke_test.sh && ./scripts/ci/smoke_test.sh
 
       - name: Install Playwright (Chromium)
         run: |
-          chmod +x scripts/install-playwright.sh
-          PLAYWRIGHT_WITH_DEPS=1 ./scripts/install-playwright.sh
+          chmod +x scripts/ci/install-playwright.sh
+          PLAYWRIGHT_WITH_DEPS=1 ./scripts/ci/install-playwright.sh
 
       - name: E2E tests (Go + Playwright)
         run: go test -tags=e2e,playwright ./test/e2e/... -count=1 -v
@@ -185,7 +185,7 @@ jobs:
             echo ""
             echo "| Test | Plik |"
             echo "|------|------|"
-            echo "| Smoke (curl) | \`scripts/smoke_test.sh\` |"
+            echo "| Smoke (curl) | \`scripts/ci/smoke_test.sh\` |"
             echo "| Go E2E API | \`test/e2e/api_test.go\` |"
             echo "| Go E2E UI (HTTP) | \`test/e2e/ui_test.go\` |"
             echo "| Go E2E UI (Playwright) | \`test/e2e/playwright_test.go\` |"

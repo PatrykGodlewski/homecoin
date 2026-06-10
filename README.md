@@ -106,8 +106,8 @@ make templ
 ### 4. Smoke test
 
 ```bash
-chmod +x scripts/smoke_test.sh
-./scripts/smoke_test.sh
+chmod +x scripts/ci/smoke_test.sh
+./scripts/ci/smoke_test.sh
 ```
 
 ---

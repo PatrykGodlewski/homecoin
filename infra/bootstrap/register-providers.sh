@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Register Azure resource providers required by infra/azure/main.bicep.
+# Register Azure resource providers required by infra/terraform/homecoin/.
 # Run once per subscription (as subscription Owner/Contributor — not the GitHub SP).
 #
-# Usage: ./infra/azure/register-providers.sh
+# Usage: ./infra/bootstrap/register-providers.sh
 
 set -euo pipefail
 

@@ -141,7 +141,7 @@
     \addlinespace
     Wdrożenie w chmurze &
     Azure: Container Apps + PostgreSQL Flexible Server \\
-    & Infrastruktura jako kod: \texttt{infra/azure/*.bicep} \\
+    & Infrastruktura jako kod: Terraform + Ansible (\texttt{infra/terraform/}) \\
     \addlinespace
     Potok CI/CD &
     GitHub Actions: \texttt{ci.yml}, \texttt{cd-azure.yml}, \texttt{azure-infra.yml} \\
@@ -174,7 +174,7 @@
   \vspace{0.8em}
   \begin{itemize}
     \item \textbf{CI} (\texttt{.github/workflows/ci.yml}): testy, \texttt{go vet}, build, Docker, E2E
-    \item \textbf{CD} (\texttt{cd-azure.yml}): obrazy \texttt{api} + \texttt{worker}, push ACR, deploy Bicep
+    \item \textbf{CD} (\texttt{cd-azure.yml}): obrazy \texttt{api} + \texttt{worker}, Terraform + Ansible
     \item \textbf{Infra} (\texttt{azure-infra.yml}): RG, ACR, PostgreSQL, Container Apps Environment
   \end{itemize}
 \end{frame}
@@ -188,7 +188,7 @@
     \textbf{Aspekt} & \textbf{Implementacja} \\
     \midrule
     HTTPS &
-    Nginx + TLS (\texttt{deploy/nginx/}); Azure ingress wymusza HTTPS \\
+    Nginx + TLS (\texttt{deploy/docker/nginx/}); Azure ingress wymusza HTTPS \\
     \addlinespace
     Hasła &
     bcrypt --- \texttt{HashPassword}, \texttt{CheckPassword} \\
@@ -211,7 +211,7 @@
 \begin{frame}[fragile]{dst+ --- demonstracja}
   \textbf{Lokalnie (HTTPS):}
   \begin{lstlisting}
-./deploy/nginx/generate-certs.sh
+./deploy/docker/nginx/generate-certs.sh
 docker compose up --build
 curl -k https://127.0.0.1:8081/health
   \end{lstlisting}
@@ -291,7 +291,7 @@ curl https://homecoin-api....azurecontainerapps.io/health
     Jednostkowe (domena) & \texttt{internal/domain/service/} & Unit tests \\
     Jednostkowe (auth) & \texttt{internal/infrastructure/auth/} & Unit tests \\
     Jednostkowe (worker) & \texttt{internal/infrastructure/workerclient/} & Unit tests \\
-    E2E smoke (bash) & \texttt{scripts/smoke\_test.sh} & \textbf{E2E tests} \\
+    E2E smoke (bash) & \texttt{scripts/ci/smoke\_test.sh} & \textbf{E2E tests} \\
     E2E (Go) & \texttt{test/e2e/api\_test.go} & \textbf{E2E tests} \\
     \bottomrule
   \end{tabular}

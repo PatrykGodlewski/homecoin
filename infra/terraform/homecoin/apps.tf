@@ -2,13 +2,6 @@ locals {
   database_url = "postgres://${var.postgres_admin_user}:${urlencode(var.postgres_admin_password)}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/${var.postgres_database_name}?sslmode=require&connect_timeout=15"
   api_image    = "${azurerm_container_registry.main.login_server}/${var.app_name}-api:${var.image_tag}"
   worker_image = "${azurerm_container_registry.main.login_server}/${var.app_name}-worker:${var.image_tag}"
-
-  http_probe = {
-    path             = "/health"
-    port             = 8080
-    transport        = "HTTP"
-    interval_seconds = 10
-  }
 }
 
 resource "azurerm_container_app" "worker" {
@@ -73,6 +66,10 @@ resource "azurerm_container_app" "worker" {
       env {
         name  = "LOG_LEVEL"
         value = "info"
+      }
+      env {
+        name  = "AUTO_MIGRATE"
+        value = "true"
       }
 
       liveness_probe {

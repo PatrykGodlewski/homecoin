@@ -1,10 +1,10 @@
 # Deploy HomeCoin microservices (API + Worker) to Azure Container Apps.
 #
-# 1. Builds images in ACR
-# 2. Deploys Container Apps via apps.bicep (real images, no placeholder)
+# Flow: build images → Terraform (Container Apps) → Ansible (verify)
 #
 # Repository variables:
-#   AZURE_RESOURCE_GROUP, AZURE_ACR_NAME, AZURE_CONTAINER_APP, AZURE_WORKER_APP
+#   AZURE_RESOURCE_GROUP (required)
+#   AZURE_ACR_NAME (optional — auto-discovered from RG)
 #
 # Repository secrets:
 #   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
@@ -50,14 +50,62 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Restore Terraform state
+        uses: actions/cache/restore@v4
+        with:
+          path: infra/terraform/homecoin/terraform.tfstate
+          key: terraform-state-v3-${{ vars.AZURE_RESOURCE_GROUP }}
+
+      - name: Verify Terraform state exists
+        run: |
+          if [ ! -f infra/terraform/homecoin/terraform.tfstate ]; then
+            echo "::error::No Terraform state found. Run **Azure Infrastructure** workflow first."
+            exit 1
+          fi
+
       - uses: docker/setup-buildx-action@v3
 
+      - name: Resolve ACR
+        id: azure
+        run: |
+          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
+          if [ -z "$RG" ]; then
+            echo "::error::Set GitHub variable AZURE_RESOURCE_GROUP."
+            exit 1
+          fi
+          if ! az group show --name "$RG" &>/dev/null; then
+            echo "::error::Resource group '$RG' not found. Run **Azure Infrastructure** first."
+            exit 1
+          fi
+
+          ACR=$(az acr list -g "$RG" --query "sort_by([].name, &@) | [0]" -o tsv)
+          if [ -z "$ACR" ] || [ "$ACR" = "null" ]; then
+            echo "::error::No Container Registry in '$RG'. Run **Azure Infrastructure** first."
+            exit 1
+          fi
+
+          if [ -n "${{ vars.AZURE_ACR_NAME }}" ]; then
+            if az acr show -n "${{ vars.AZURE_ACR_NAME }}" -g "$RG" &>/dev/null; then
+              ACR="${{ vars.AZURE_ACR_NAME }}"
+            else
+              echo "::warning::AZURE_ACR_NAME '${{ vars.AZURE_ACR_NAME }}' not in $RG — using '$ACR'."
+            fi
+          fi
+
+          echo "acr_name=$ACR" >> "$GITHUB_OUTPUT"
+          echo "Using ACR=$ACR in $RG"
+
       - name: Login to ACR
-        run: az acr login --name "${{ vars.AZURE_ACR_NAME }}"
+        run: az acr login --name "${{ steps.azure.outputs.acr_name }}"
 
       - name: Build and push API image
         run: |
-          ACR_LOGIN=$(az acr show --name "${{ vars.AZURE_ACR_NAME }}" --query loginServer -o tsv)
+          ACR_LOGIN=$(az acr show --name "${{ steps.azure.outputs.acr_name }}" --query loginServer -o tsv)
           TAG="${{ steps.meta.outputs.tag }}"
           docker build --target api \
             -t "${ACR_LOGIN}/homecoin-api:${TAG}" \
@@ -67,7 +115,7 @@ jobs:
 
       - name: Build and push Worker image
         run: |
-          ACR_LOGIN=$(az acr show --name "${{ vars.AZURE_ACR_NAME }}" --query loginServer -o tsv)
+          ACR_LOGIN=$(az acr show --name "${{ steps.azure.outputs.acr_name }}" --query loginServer -o tsv)
           TAG="${{ steps.meta.outputs.tag }}"
           docker build --target worker \
             -t "${ACR_LOGIN}/homecoin-worker:${TAG}" \
@@ -75,94 +123,49 @@ jobs:
           docker push "${ACR_LOGIN}/homecoin-worker:${TAG}"
           docker push "${ACR_LOGIN}/homecoin-worker:latest"
 
-      - name: Remove failed Container Apps (if any)
+      - name: Terraform apply (Container Apps)
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          IMAGE_TAG: ${{ steps.meta.outputs.tag }}
+          TF_VAR_postgres_admin_password: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+          TF_VAR_superkit_secret: ${{ secrets.SUPERKIT_SECRET }}
+          TF_VAR_worker_internal_token: ${{ secrets.WORKER_INTERNAL_TOKEN }}
         run: |
-          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
-          for app in "${{ vars.AZURE_WORKER_APP }}" "${{ vars.AZURE_CONTAINER_APP }}"; do
-            if az containerapp show -g "$RG" -n "$app" &>/dev/null; then
-              state=$(az containerapp show -g "$RG" -n "$app" --query properties.provisioningState -o tsv)
-              echo "$app: $state"
-              if [ "$state" = "Failed" ]; then
-                echo "Deleting failed app $app ..."
-                az containerapp delete -g "$RG" -n "$app" --yes
-              fi
-            else
-              echo "$app: not found (will be created)"
-            fi
-          done
+          chmod +x infra/scripts/terraform-apply-apps.sh
+          ./infra/scripts/terraform-apply-apps.sh
 
-      - name: Wait for ACR image propagation
-        run: sleep 45
+      - name: Setup Ansible
+        run: pip install ansible
 
-      - name: Deploy Container Apps (Bicep)
-        id: apps
+      - name: Generate Ansible vars from Terraform outputs
         run: |
-          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
-          ACR="${{ vars.AZURE_ACR_NAME }}"
-          RG_LOCATION=$(az group show --name "$RG" --query location -o tsv)
-          CONTAINER_ENV=$(az containerapp env list -g "$RG" --query "[?starts_with(name, 'homecoin')].name | [0]" -o tsv)
-          POSTGRES_SERVER=$(az postgres flexible-server list -g "$RG" --query "[?starts_with(name, 'homecoin')].name | [0]" -o tsv)
+          python3 infra/scripts/generate_ansible_vars.py \
+            infra/terraform/homecoin/deployment-outputs.json \
+            > infra/ansible/group_vars/all/terraform.yml
 
-          echo "Container env: $CONTAINER_ENV"
-          echo "PostgreSQL: $POSTGRES_SERVER"
+      - name: Verify deployment (Ansible)
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          ANSIBLE_CONFIG=infra/ansible/ansible.cfg \
+          ansible-playbook -i infra/ansible/inventory/localhost.ini \
+            infra/ansible/playbooks/homecoin.yml
 
-          # Enable ACR admin user for image pull (avoids AcrPull RBAC issues on student subscriptions)
-          az acr update -n "$ACR" --admin-enabled true --output none
-          ACR_USER=$(az acr credential show -n "$ACR" --query username -o tsv)
-          ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
+      - name: Save Terraform state
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: infra/terraform/homecoin/terraform.tfstate
+          key: terraform-state-v3-${{ vars.AZURE_RESOURCE_GROUP }}
 
-          az deployment group create \
-            --resource-group "$RG" \
-            --name "homecoin-apps-$(date +%Y%m%d%H%M%S)" \
-            --template-file infra/azure/apps.bicep \
-            --parameters \
-              acrName="$ACR" \
-              containerEnvName="$CONTAINER_ENV" \
-              postgresServerName="$POSTGRES_SERVER" \
-              location="$RG_LOCATION" \
-              postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
-              jwtSecret="${{ secrets.JWT_SECRET }}" \
-              superkitSecret="${{ secrets.SUPERKIT_SECRET }}" \
-              workerInternalToken="${{ secrets.WORKER_INTERNAL_TOKEN }}" \
-              acrUsername="$ACR_USER" \
-              acrPassword="$ACR_PASS" \
-              imageTag="${{ steps.meta.outputs.tag }}" \
-            --query properties.outputs \
-            --output json > apps-outputs.json
-
-          echo "fqdn=$(jq -r '.containerAppFqdn.value' apps-outputs.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Health check (HTTPS)
+      - name: Summary
         if: success()
         run: |
-          RG="${{ vars.AZURE_RESOURCE_GROUP }}"
-          FQDN="${{ steps.apps.outputs.fqdn }}"
-
-          echo "Public URL: https://${FQDN}/"
-          echo "Waiting for https://${FQDN}/health ..."
-
-          for i in $(seq 1 36); do
-            RUNNING=$(az containerapp show -g "$RG" -n homecoin-api --query properties.runningStatus -o tsv 2>/dev/null || echo "Unknown")
-            REPLICAS=$(az containerapp replica list -g "$RG" -n homecoin-api --query "length(@)" -o tsv 2>/dev/null || echo "0")
-            echo "[$i/36] running=$RUNNING replicas=$REPLICAS"
-
-            if curl -sf --max-time 10 "https://${FQDN}/health" 2>/dev/null | grep -q ok; then
-              echo "Deployment healthy."
-              exit 0
-            fi
-
-            if [ "$RUNNING" = "NotRunning" ] || [ "$REPLICAS" = "0" ]; then
-              echo "--- API logs (app may be crashing) ---"
-              az containerapp logs show -g "$RG" -n homecoin-api --tail 20 2>/dev/null || true
-              echo "--- Worker logs ---"
-              az containerapp logs show -g "$RG" -n homecoin-worker --tail 10 2>/dev/null || true
-            fi
-
-            sleep 10
-          done
-
-          echo "::error::Health check failed. Common fix: POSTGRES_ADMIN_PASSWORD in GitHub secrets must match the PostgreSQL server password."
-          echo "--- Final API logs ---"
-          az containerapp logs show -g "$RG" -n homecoin-api --tail 50 || true
-          curl -v --max-time 15 "https://${FQDN}/health" || true
-          exit 1
+          FQDN=$(jq -r '.container_app_fqdn.value' infra/terraform/homecoin/deployment-outputs.json)
+          {
+            echo "### HomeCoin deployed"
+            echo ""
+            echo "URL: https://${FQDN}/"
+            echo "Health: https://${FQDN}/health"
+          } >> "$GITHUB_STEP_SUMMARY"

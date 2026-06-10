@@ -55,7 +55,15 @@ else
   az ad sp create --id "$APP_ID" --output none 2>/dev/null || true
 fi
 
-echo "==> Assigning Contributor on resource group (idempotent)"
+echo "==> Assigning Reader on subscription (required for GitHub OIDC login)"
+SUBSCRIPTION_SCOPE="/subscriptions/${SUBSCRIPTION_ID}"
+az role assignment create \
+  --assignee "$APP_ID" \
+  --role Reader \
+  --scope "$SUBSCRIPTION_SCOPE" \
+  --output none 2>/dev/null || true
+
+echo "==> Assigning Contributor on resource group"
 RG_ID="$(az group show --name "$AZURE_RESOURCE_GROUP" --query id -o tsv)"
 az role assignment create \
   --assignee "$APP_ID" \

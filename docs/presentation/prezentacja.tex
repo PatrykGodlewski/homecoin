@@ -1,0 +1,360 @@
+% HomeCoin — prezentacja zaliczeniowa
+
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[polish]{babel}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
+
+\usetheme{Madrid}
+\usecolortheme{whale}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!8},
+  showstringspaces=false,
+  columns=fullflexible,
+  keepspaces=true,
+  literate={\#}{{\#}}1
+}
+
+% hyperref na końcu preambuły
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!70!black,
+  urlcolor=blue!70!black
+}
+
+\title{HomeCoin}
+\subtitle{Aplikacja do zarządzania finansami domowymi}
+\author{Patryk Godlewski}
+\institute{%
+  Sekcja: \textbf{[WPISZ NUMER SEKCJI]} \\
+  Godzina prezentacji: \textbf{[WPISZ GODZINĘ --- plik Teams]}%
+}
+\date{14 czerwca 2026}
+
+% --- strona tytułowa (formularz uczelni) — uzupełnij przed drukiem ---
+\newcommand{\formline}[1]{\leavevmode\hbox to #1{\dotfill\hss}}
+\newcommand{\tytulowapage}{%
+  \setbeamertemplate{headline}{}%
+  \setbeamertemplate{footline}{}%
+  \setbeamertemplate{navigation symbols}{}%
+  \begin{frame}[plain]
+    \vspace{0.4cm}
+    \small
+    \noindent
+    Sekcja w składzie: \formline{0.42\linewidth}%
+    \hfill
+    Data: \formline{0.22\linewidth}
+
+    \vspace{1.6cm}
+    \normalsize
+    \noindent
+    Projekt zaliczeniowy: Przetwarzanie w chmurach obliczeniowych na ocenę
+    \formline{0.18\linewidth}
+
+    \vspace{1.2cm}
+    \noindent
+    Spełnienie kryteriów opisane na stronach:
+
+    \vspace{0.6cm}
+    \centering
+    \renewcommand{\arraystretch}{1.35}
+    \begin{tabular}{|>{\centering\arraybackslash}p{1.6cm}|>{\centering\arraybackslash}p{2.2cm}|>{\centering\arraybackslash}p{2.2cm}|p{5.8cm}|}
+      \hline
+      \textbf{Ocena} & \textbf{Strona od} & \textbf{Strona do} & \textbf{kryteria\_sprawdzone} \\
+      \hline
+      dst   &  &  &  \\
+      \hline
+      dst+  &  &  &  \\
+      \hline
+      db    &  &  &  \\
+      \hline
+      db+   &  &  &  \\
+      \hline
+      bdb   &  &  &  \\
+      \hline
+    \end{tabular}
+  \end{frame}%
+}
+
+\begin{document}
+
+\tytulowapage
+
+\begin{frame}{Agenda}
+  \tableofcontents
+\end{frame}
+
+\section{Wprowadzenie}
+
+\begin{frame}{Projekt: HomeCoin}
+  \textbf{Cel:} aplikacja webowa do finansów domowych --- dzielenie wydatków, budżety, skarbonki, rozliczenia.
+
+  \vspace{0.6em}
+  \begin{columns}[T]
+    \column{0.48\textwidth}
+    \textbf{Stack technologiczny}
+    \begin{itemize}
+      \item Go 1.25, PostgreSQL
+      \item Superkit + Templ + HTMX (UI)
+      \item REST API \texttt{/api/v1}
+      \item Azure Container Apps
+    \end{itemize}
+
+    \column{0.48\textwidth}
+    \textbf{Linki}
+    \begin{itemize}
+      \item \href{https://github.com/PatrykGodlewski/homecoin}{GitHub --- kod + README}
+      \item \href{https://github.com/PatrykGodlewski/homecoin/blob/main/docs/OCENA.md}{docs/OCENA.md}
+      \item \href{https://homecoin-api.agreeablerock-d7dc1820.uaenorth.azurecontainerapps.io/health}{Azure --- wdrożenie live}
+    \end{itemize}
+  \end{columns}
+
+  \vspace{0.5em}
+  \small\textit{Kryteria: dst $\rightarrow$ dst+ $\rightarrow$ db $\rightarrow$ db+ $\rightarrow$ bdb.}
+\end{frame}
+
+\section{Ocena dst}
+
+\begin{frame}{dst --- CRUD + chmura + CI/CD}
+  \small
+  \begin{tabular}{@{}p{0.28\textwidth}p{0.66\textwidth}@{}}
+    \toprule
+    \textbf{Kryterium} & \textbf{Implementacja} \\
+    \midrule
+    Operacje CRUD &
+    REST API: wydatki, budżety, kategorie, skarbonki, rozliczenia \\
+    & \texttt{GET|POST /api/v1/households/\{id\}/...} \\
+    \addlinespace
+    Wdrożenie w chmurze &
+    Azure: Container Apps + PostgreSQL Flexible Server \\
+    & Infrastruktura jako kod: \texttt{infra/azure/*.bicep} \\
+    \addlinespace
+    Potok CI/CD &
+    GitHub Actions: \texttt{ci.yml}, \texttt{cd-azure.yml}, \texttt{azure-infra.yml} \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.5em}
+  \normalsize
+  \textbf{Demonstracja:} push na \texttt{main} $\rightarrow$ CI $\rightarrow$ CD (ACR $\rightarrow$ Azure).
+\end{frame}
+
+\begin{frame}{dst --- przepływ CI/CD}
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[
+    node distance=0.55cm and 0.9cm,
+    box/.style={draw, rounded corners, minimum width=2.1cm, minimum height=0.75cm, align=center, font=\footnotesize},
+    arr/.style={-{Stealth[length=2mm]}, thick}
+  ]
+    \node[box, fill=blue!12] (git) {GitHub\\push main};
+    \node[box, fill=green!12, right=of git] (ci) {CI\\testy, lint, build};
+    \node[box, fill=orange!12, right=of ci] (cd) {CD Azure\\ACR + deploy};
+    \node[box, fill=purple!12, right=of cd] (az) {Container Apps\\+ PostgreSQL};
+    \draw[arr] (git) -- (ci);
+    \draw[arr] (ci) -- (cd);
+    \draw[arr] (cd) -- (az);
+  \end{tikzpicture}%
+  }
+
+  \vspace{0.8em}
+  \begin{itemize}
+    \item \textbf{CI} (\texttt{.github/workflows/ci.yml}): testy, \texttt{go vet}, build, Docker, E2E
+    \item \textbf{CD} (\texttt{cd-azure.yml}): obrazy \texttt{api} + \texttt{worker}, push ACR, deploy Bicep
+    \item \textbf{Infra} (\texttt{azure-infra.yml}): RG, ACR, PostgreSQL, Container Apps Environment
+  \end{itemize}
+\end{frame}
+
+\section{Ocena dst+}
+
+\begin{frame}{dst+ --- bezpieczeństwo}
+  \small
+  \begin{tabular}{@{}p{0.32\textwidth}p{0.62\textwidth}@{}}
+    \toprule
+    \textbf{Aspekt} & \textbf{Implementacja} \\
+    \midrule
+    HTTPS &
+    Nginx + TLS (\texttt{deploy/nginx/}); Azure ingress wymusza HTTPS \\
+    \addlinespace
+    Hasła &
+    bcrypt --- \texttt{HashPassword}, \texttt{CheckPassword} \\
+    \addlinespace
+    Tokeny &
+    JWT HMAC-SHA256; refresh tokeny hashowane SHA-256 w DB \\
+    \addlinespace
+    Nagłówki HTTP &
+    HSTS, X-Frame-Options, X-Content-Type-Options \\
+    \addlinespace
+    Baza w chmurze &
+    PostgreSQL Azure: \texttt{sslmode=require} \\
+    \addlinespace
+    Usługi wewnętrzne &
+    Token \texttt{X-Worker-Token} (API $\rightarrow$ Worker) \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+\begin{frame}[fragile]{dst+ --- demonstracja}
+  \textbf{Lokalnie (HTTPS):}
+  \begin{lstlisting}
+./deploy/nginx/generate-certs.sh
+docker compose up --build
+curl -k https://127.0.0.1:8081/health
+  \end{lstlisting}
+
+  \textbf{Na Azure:}
+  \begin{lstlisting}
+curl https://homecoin-api....azurecontainerapps.io/health
+  \end{lstlisting}
+
+  Odpowiedź: \verb|{"status":"ok"}|
+
+  \vspace{0.4em}
+  Hasło użytkownika przechowywane jako hash bcrypt.
+\end{frame}
+
+\section{Ocena db}
+
+\begin{frame}{db --- Docker Compose}
+  \textbf{Plik:} \texttt{docker-compose.yml} --- 4 kontenery, healthchecki, \texttt{depends\_on}.
+
+  \vspace{0.5em}
+  \centering
+  \small
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    \textbf{Kontener} & \textbf{Rola} & \textbf{Port (host)} \\
+    \midrule
+    \texttt{postgres} & Baza danych & 5433 \\
+    \texttt{api} & REST API + UI & wewn.\ 8080 \\
+    \texttt{worker} & Zadania w tle & wewn.\ 8080 \\
+    \texttt{nginx} & TLS, proxy & 8081 (HTTPS) \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.5em}
+  \normalsize
+  \texttt{docker compose up --build} \quad UI: \texttt{https://127.0.0.1:8081}
+\end{frame}
+
+\section{Ocena db+}
+
+\begin{frame}{db+ --- mikrousługi ($\geq$2 usługi)}
+  \centering
+  \resizebox{0.95\textwidth}{!}{%
+  \begin{tikzpicture}[
+    node distance=0.7cm and 1.0cm,
+    svc/.style={draw, rounded corners, minimum width=2.2cm, minimum height=0.9cm, align=center, font=\footnotesize},
+    arr/.style={-{Stealth[length=2mm]}, thick}
+  ]
+    \node[svc, fill=orange!15] (nginx) {nginx\\port 443};
+    \node[svc, fill=blue!15, below=of nginx] (api) {api\\REST + UI + SSE};
+    \node[svc, fill=green!15, left=of api] (worker) {worker\\recalc, budżety};
+    \node[svc, fill=gray!15, right=of api] (pg) {postgres};
+    \draw[arr] (nginx) -- node[right, font=\tiny] {proxy} (api);
+    \draw[arr] (api) -- node[above, font=\tiny, align=center] {POST\\recalculate} (worker);
+    \draw[arr] (api) -- (pg);
+    \draw[arr] (worker) -- (pg);
+  \end{tikzpicture}%
+  }
+
+  \vspace{0.4em}
+  \begin{itemize}
+    \item \textbf{api} (\texttt{cmd/api/main.go}) --- CRUD, UI, outbox $\rightarrow$ SSE
+    \item \textbf{worker} (\texttt{cmd/worker/main.go}) --- salda, budżety, przypomnienia
+    \item Komunikacja HTTP + wspólna baza PostgreSQL
+  \end{itemize}
+\end{frame}
+
+\section{Ocena bdb}
+
+\begin{frame}{bdb --- testy w CI/CD}
+  \small
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    \textbf{Typ} & \textbf{Lokalizacja} & \textbf{CI (job)} \\
+    \midrule
+    Jednostkowe (domena) & \texttt{internal/domain/service/} & Unit tests \\
+    Jednostkowe (auth) & \texttt{internal/infrastructure/auth/} & Unit tests \\
+    Jednostkowe (worker) & \texttt{internal/infrastructure/workerclient/} & Unit tests \\
+    E2E smoke (bash) & \texttt{scripts/smoke\_test.sh} & \textbf{E2E tests} \\
+    E2E (Go) & \texttt{test/e2e/api\_test.go} & \textbf{E2E tests} \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.5em}
+  \normalsize
+  \textbf{Potok E2E:} certyfikaty TLS $\rightarrow$ \texttt{docker compose up --wait} $\rightarrow$ smoke test $\rightarrow$ \texttt{go test -tags=e2e}
+\end{frame}
+
+\begin{frame}[fragile]{bdb --- gdzie to zobaczyć}
+  \textbf{GitHub Actions:} \\
+  \href{https://github.com/PatrykGodlewski/homecoin/actions}{github.com/PatrykGodlewski/homecoin/actions}
+  $\rightarrow$ workflow \textbf{CI} $\rightarrow$ job \textbf{E2E tests}
+
+  \vspace{0.6em}
+  \textbf{Lokalnie:}
+  \begin{lstlisting}
+make test
+make e2e
+  \end{lstlisting}
+\end{frame}
+
+\section{Podsumowanie}
+
+\begin{frame}{Mapowanie kryteriów}
+  \small
+  \begin{tabular}{@{}clp{0.50\textwidth}@{}}
+    \toprule
+    \textbf{Ocena} & & \textbf{Kluczowy dowód} \\
+    \midrule
+    dst   & $\checkmark$ & CRUD API, Azure deploy, GitHub Actions \\
+    dst+  & $\checkmark$ & HTTPS, bcrypt, nagłówki, TLS do DB \\
+    db    & $\checkmark$ & \texttt{docker-compose.yml} --- 4 kontenery \\
+    db+   & $\checkmark$ & \texttt{api} + \texttt{worker}, HTTP + outbox \\
+    bdb   & $\checkmark$ & \texttt{go test ./...} + E2E w \texttt{ci.yml} \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.6em}
+  \normalsize
+  Dokumentacja: \href{https://github.com/PatrykGodlewski/homecoin/blob/main/docs/OCENA.md}{docs/OCENA.md},
+  \href{https://github.com/PatrykGodlewski/homecoin/blob/main/docs/DEPLOYMENT.md}{DEPLOYMENT.md},
+  \href{https://github.com/PatrykGodlewski/homecoin/blob/main/README.md}{README.md}
+\end{frame}
+
+\begin{frame}{Plan demonstracji (10--12 min)}
+  \begin{enumerate}
+    \item Strona tytułowa + agenda
+    \item Krótki opis HomeCoin (UI + API)
+    \item \textbf{dst}: GitHub Actions $\rightarrow$ CI $\rightarrow$ CD $\rightarrow$ \texttt{/health} na Azure
+    \item \textbf{dst+}: HTTPS, bcrypt
+    \item \textbf{db/db+}: \texttt{docker compose ps} --- 4 kontenery
+    \item \textbf{bdb}: job \textbf{E2E tests} w Actions
+    \item Podsumowanie + Q\&A
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}
+  \centering
+  \Large Dziękuję za uwagę!
+  \vfill
+  \normalsize
+  \href{https://github.com/PatrykGodlewski/homecoin}{github.com/PatrykGodlewski/homecoin}
+\end{frame}
+
+\end{document}

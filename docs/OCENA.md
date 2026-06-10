@@ -76,7 +76,9 @@ make docker-api
 | Jednostkowe (domena) | `internal/domain/service/*_test.go` | `go test ./...` |
 | Jednostkowe (auth) | `internal/infrastructure/auth/jwt_test.go` | `go test ./...` |
 | Jednostkowe (worker client) | `internal/infrastructure/workerclient/trigger_test.go` | `go test ./...` |
-| E2E (Go) | `test/e2e/api_test.go` (`-tags=e2e`) | job **E2E tests** w `ci.yml` |
+| E2E API (Go) | `test/e2e/api_test.go` (`-tags=e2e`) | job **E2E tests** w `ci.yml` |
+| E2E UI (Go, HTTP) | `test/e2e/ui_test.go` — formularze HTML, sesja cookie | job **E2E tests** w `ci.yml` |
+| E2E UI (Playwright) | `test/e2e/playwright_test.go` — Chromium, pełny flow UI | job **E2E tests** w `ci.yml` |
 | E2E (smoke) | `scripts/smoke_test.sh` | job **E2E tests** w `ci.yml` |
 
 **Gdzie zobaczyć w GitHub:** *Actions → workflow **CI** → otwórz run → job **E2E tests*** (ostatni job na liście).
@@ -85,7 +87,7 @@ make docker-api
 1. Generowanie certyfikatów TLS
 2. `docker compose up -d --build --wait` (pełny stack mikrousług)
 3. `./scripts/smoke_test.sh` (rejestracja → gospodarstwo → wydatek)
-4. `go test -tags=e2e ./test/e2e/...`
+4. `go test -tags=e2e ./test/e2e/...` (REST API + pełny flow UI)
 
 **Uruchomienie lokalne:**
 ```bash

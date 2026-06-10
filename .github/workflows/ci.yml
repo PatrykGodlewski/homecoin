@@ -159,8 +159,13 @@ jobs:
       - name: E2E smoke test (bash)
         run: chmod +x scripts/smoke_test.sh && ./scripts/smoke_test.sh
 
-      - name: E2E tests (Go)
-        run: go test -tags=e2e ./test/e2e/... -count=1 -v
+      - name: Install Playwright (Chromium)
+        run: |
+          chmod +x scripts/install-playwright.sh
+          PLAYWRIGHT_WITH_DEPS=1 ./scripts/install-playwright.sh
+
+      - name: E2E tests (Go + Playwright)
+        run: go test -tags=e2e,playwright ./test/e2e/... -count=1 -v
 
       - name: E2E debug on failure
         if: failure()
@@ -181,7 +186,9 @@ jobs:
             echo "| Test | Plik |"
             echo "|------|------|"
             echo "| Smoke (curl) | \`scripts/smoke_test.sh\` |"
-            echo "| Go E2E | \`test/e2e/api_test.go\` |"
+            echo "| Go E2E API | \`test/e2e/api_test.go\` |"
+            echo "| Go E2E UI (HTTP) | \`test/e2e/ui_test.go\` |"
+            echo "| Go E2E UI (Playwright) | \`test/e2e/playwright_test.go\` |"
             echo ""
             echo "Stack: docker compose (api + worker + postgres + nginx HTTPS)"
           } >> "$GITHUB_STEP_SUMMARY"

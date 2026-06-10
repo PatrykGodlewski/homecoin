@@ -10,7 +10,7 @@
 \usepackage{array}
 \usepackage{listings}
 \usepackage{tikz}
-\usetikzlibrary{positioning,arrows.meta}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds}
 
 \usetheme{Madrid}
 \usecolortheme{whale}
@@ -40,8 +40,8 @@
 \subtitle{Aplikacja do zarządzania finansami domowymi}
 \author{Patryk Godlewski}
 \institute{%
-  Sekcja: \textbf{[WPISZ NUMER SEKCJI]} \\
-  Godzina prezentacji: \textbf{[WPISZ GODZINĘ --- plik Teams]}%
+  Przetwarzanie w chmurach obliczeniowych \\
+  Ocena docelowa: \textbf{bdb} \quad|\quad Prezentacja: 14 czerwca 2026%
 }
 \date{14 czerwca 2026}
 
@@ -49,8 +49,30 @@
 \renewcommand{\sectionname}{Sekcja}
 \renewcommand{\subsectionname}{Podsekcja}
 
-% --- strona tytułowa (formularz uczelni) — uzupełnij przed drukiem ---
-\newcommand{\formline}[1]{\leavevmode\hbox to #1{\dotfill\hss}}
+% TikZ — db+ (style w preambule; unikaj # wewnątrz \begin{frame})
+\tikzset{
+  dbpbase/.style={
+    line width=0.85pt, rounded corners=4pt,
+    minimum width=2.35cm, minimum height=0.95cm,
+    align=center, font=\footnotesize
+  },
+  dbpnginx/.style={dbpbase, draw=orange!65!black, fill=orange!14},
+  dbpapi/.style={dbpbase, draw=blue!65!black, fill=blue!14},
+  dbpworker/.style={dbpbase, draw=green!60!black, fill=green!14},
+  dbppg/.style={dbpbase, draw=gray!65!black, fill=gray!14},
+  dbparr/.style={-{Stealth[length=2.2mm]}, semithick, draw=gray!65},
+  dbplbl/.style={font=\scriptsize, fill=white, inner sep=1.5pt, text=gray!40!black},
+  dbpmicro/.style={font=\scriptsize\bfseries, text=blue!65!black},
+  dbmigrate/.style={
+    dbpbase, draw=purple!60!black, fill=purple!10, dashed,
+    minimum width=2.0cm, minimum height=0.75cm, font=\scriptsize
+  },
+  dbcompose/.style={font=\scriptsize\bfseries, text=teal!60!black},
+  dbdepon/.style={font=\tiny, fill=white, inner sep=1pt, text=gray!45!black}
+}
+
+% --- strona tytułowa (formularz uczelni) ---
+\newcommand{\formfill}[2]{\underline{\makebox[#1][l]{#2}}}
 \newcommand{\tytulowapage}{%
   \setbeamertemplate{headline}{}%
   \setbeamertemplate{footline}{}%
@@ -59,15 +81,14 @@
     \vspace{0.4cm}
     \small
     \noindent
-    Sekcja w składzie: \formline{0.42\linewidth}%
+    Sekcja w składzie: \formfill{0.42\linewidth}{Patryk Godlewski}%
     \hfill
-    Data: \formline{0.22\linewidth}
+    Data: \formfill{0.22\linewidth}{14.06.2026}
 
     \vspace{1.6cm}
     \normalsize
     \noindent
-    Projekt zaliczeniowy: Przetwarzanie w chmurach obliczeniowych na ocenę
-    \formline{0.18\linewidth}
+    Projekt zaliczeniowy: Przetwarzanie w chmurach obliczeniowych na ocenę \textbf{bdb}
 
     \vspace{1.2cm}
     \noindent
@@ -75,20 +96,22 @@
 
     \vspace{0.6cm}
     \centering
-    \renewcommand{\arraystretch}{1.35}
-    \begin{tabular}{|>{\centering\arraybackslash}p{1.6cm}|>{\centering\arraybackslash}p{2.2cm}|>{\centering\arraybackslash}p{2.2cm}|p{5.8cm}|}
+    \footnotesize
+    \setlength{\tabcolsep}{3pt}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|>{\centering\arraybackslash}p{0.10\linewidth}|>{\centering\arraybackslash}p{0.13\linewidth}|>{\centering\arraybackslash}p{0.13\linewidth}|>{\raggedright\arraybackslash}p{0.52\linewidth}|}
       \hline
       \textbf{Ocena} & \textbf{Strona od} & \textbf{Strona do} & \textbf{kryteria\_sprawdzone} \\
       \hline
-      dst   &  &  &  \\
+      dst   & 4 & 5 & CRUD (REST API), wdrożenie Azure, CI/CD (GitHub Actions) \\
       \hline
-      dst+  &  &  &  \\
+      dst+  & 6 & 7 & HTTPS/TLS, bcrypt, JWT, nagłówki HTTP, TLS do PostgreSQL \\
       \hline
-      db    &  &  &  \\
+      db    & 8 & 8 & Docker Compose: postgres, api, worker, nginx (+ migrate) \\
       \hline
-      db+   &  &  &  \\
+      db+   & 9 & 9 & Mikrousługi api + worker ($\geq$2), komunikacja HTTP \\
       \hline
-      bdb   &  &  &  \\
+      bdb   & 10 & 11 & Testy jednostkowe (\texttt{go test}) + E2E w \texttt{ci.yml} \\
       \hline
     \end{tabular}
   \end{frame}%
@@ -128,7 +151,6 @@
   \end{columns}
 
   \vspace{0.5em}
-  \small\textit{Kryteria: dst $\rightarrow$ dst+ $\rightarrow$ db $\rightarrow$ db+ $\rightarrow$ bdb.}
 \end{frame}
 
 \section{Ocena dst}
@@ -234,55 +256,104 @@ curl https://homecoin-api.ashyocean-93c64f80.uaenorth.azurecontainerapps.io/heal
 \section{Ocena db}
 
 \begin{frame}{db --- Docker Compose}
-  \textbf{Plik:} \texttt{docker-compose.yml} --- 5 kontenerów (postgres, migrate, api, worker, nginx), healthchecki, \texttt{depends\_on}.
+  \begin{columns}[T,onlytextwidth]
+    \column{0.55\textwidth}
+    \centering
+    \resizebox{\linewidth}{!}{%
+    \begin{tikzpicture}[
+      node distance=0.45cm and 0.7cm
+    ]
+      \node[dbpnginx] (nginx) {\textbf{nginx}\\\scriptsize :8081 HTTPS};
+      \node[dbpapi, below=of nginx] (api) {\textbf{api}\\\scriptsize REST + UI};
+      \node[dbpworker, left=0.9cm of api] (worker) {\textbf{worker}\\\scriptsize zadania w tle};
+      \node[dbppg, right=0.9cm of api] (pg) {\textbf{postgres}\\\scriptsize baza danych};
+      \node[dbmigrate, below=0.35cm of pg] (migrate) {\textbf{migrate}\\\scriptsize jednorazowo};
 
-  \vspace{0.5em}
-  \centering
-  \small
-  \begin{tabular}{@{}lll@{}}
-    \toprule
-    \textbf{Kontener} & \textbf{Rola} & \textbf{Port (host)} \\
-    \midrule
-    \texttt{postgres} & Baza danych & 5433 \\
-    \texttt{migrate} & Migracje schematu (jednorazowo) & --- \\
-    \texttt{api} & REST API + interfejs & wewn.\ 8080 \\
-    \texttt{worker} & Zadania w tle & wewn.\ 8080 \\
-    \texttt{nginx} & TLS, reverse proxy & 8081 (HTTPS) \\
-    \bottomrule
-  \end{tabular}
+      \draw[dbparr] ([yshift=2pt]nginx.south) -- node[dbplbl, right=2pt] {proxy} ([yshift=2pt]api.north);
+      \draw[dbparr] (api.west) -- (worker.east);
+      \draw[dbparr] (api.east) -- (pg.west);
+      \draw[dbparr, dashed] (migrate.north) -- node[dbdepon, left] {po starcie PG} (pg.south);
+      \draw[dbparr, dashed] (worker.north east) -- node[dbdepon, above, pos=0.35] {depends\_on} (migrate.west);
 
-  \vspace{0.5em}
-  \normalsize
-  \texttt{docker compose up --build} \quad UI: \texttt{https://127.0.0.1:8081}
+      \begin{scope}[on background layer]
+        \node[fit=(nginx)(api)(worker)(pg)(migrate), inner sep=0.4cm, rounded corners=7pt,
+              draw=teal!45, line width=0.9pt, dashed, fill=teal!4] (stack) {};
+        \node[dbcompose, anchor=south] at ([yshift=2pt]stack.north) {docker-compose.yml --- 5 kontenerów};
+      \end{scope}
+    \end{tikzpicture}%
+    }
+
+    \column{0.43\textwidth}
+    \vspace{-0.1em}
+    \footnotesize
+    \begin{block}{Orkiestracja}
+      \raggedright
+      \texttt{depends\_on} + healthchecki --- start w kolejności: postgres $\rightarrow$ migrate $\rightarrow$ worker $\rightarrow$ api $\rightarrow$ nginx
+    \end{block}
+    \vspace{-0.45em}
+    \begin{block}{Kontenery}
+      \renewcommand{\arraystretch}{1.15}
+      \begin{tabular}{@{}ll@{}}
+        \texttt{postgres} & :5433 \\
+        \texttt{migrate}  & migracje SQL \\
+        \texttt{worker}   & wewn.\ :8080 \\
+        \texttt{api}      & wewn.\ :8080 \\
+        \texttt{nginx}    & :8081 HTTPS \\
+      \end{tabular}
+    \end{block}
+    \vspace{-0.45em}
+    \begin{alertblock}{Uruchomienie}
+      \raggedright
+      \texttt{docker compose up --build}\\
+      UI: \texttt{https://127.0.0.1:8081}
+    \end{alertblock}
+  \end{columns}
 \end{frame}
 
 \section{Ocena db+}
 
 \begin{frame}{db+ --- mikrousługi ($\geq$2 usługi)}
-  \centering
-  \resizebox{0.95\textwidth}{!}{%
-  \begin{tikzpicture}[
-    node distance=0.7cm and 1.0cm,
-    svc/.style={draw, rounded corners, minimum width=2.2cm, minimum height=0.9cm, align=center, font=\footnotesize},
-    arr/.style={-{Stealth[length=2mm]}, thick}
-  ]
-    \node[svc, fill=orange!15] (nginx) {nginx\\port 443};
-    \node[svc, fill=blue!15, below=of nginx] (api) {api\\REST + UI + SSE};
-    \node[svc, fill=green!15, left=of api] (worker) {worker\\salda, budżety};
-    \node[svc, fill=gray!15, right=of api] (pg) {postgres};
-    \draw[arr] (nginx) -- node[right, font=\tiny] {proxy} (api);
-    \draw[arr] (api) -- node[above, font=\tiny, align=center] {POST\\przeliczanie} (worker);
-    \draw[arr] (api) -- (pg);
-    \draw[arr] (worker) -- (pg);
-  \end{tikzpicture}%
-  }
+  \begin{columns}[T,onlytextwidth]
+    \column{0.57\textwidth}
+    \centering
+    \resizebox{\linewidth}{!}{%
+    \begin{tikzpicture}[
+      node distance=0.5cm and 0.75cm
+    ]
+      \node[dbpnginx] (nginx) {\textbf{nginx}\\\scriptsize TLS, reverse proxy};
+      \node[dbpapi, below=of nginx] (api) {\textbf{api}\\\scriptsize REST + UI + SSE};
+      \node[dbpworker, left=1.0cm of api] (worker) {\textbf{worker}\\\scriptsize salda, budżety};
+      \node[dbppg, right=1.0cm of api] (pg) {\textbf{postgres}\\\scriptsize wspólna baza};
 
-  \vspace{0.4em}
-  \begin{itemize}
-    \item \textbf{api} (\texttt{cmd/api/main.go}) --- operacje CRUD, interfejs, outbox $\rightarrow$ SSE
-    \item \textbf{worker} (\texttt{cmd/worker/main.go}) --- salda, budżety, przypomnienia
-    \item Komunikacja HTTP + wspólna baza danych PostgreSQL
-  \end{itemize}
+      \draw[dbparr] ([yshift=2pt]nginx.south) -- node[dbplbl, right=2pt] {HTTPS} ([yshift=2pt]api.north);
+      \draw[dbparr, dashed, draw=green!55!black] (api.west) -- node[dbplbl, above, align=center] {HTTP POST} (worker.east);
+      \draw[dbparr] (api.east) -- node[dbplbl, above] {SQL} (pg.west);
+      \draw[dbparr] (worker.south east) -- node[dbplbl, below, pos=0.55] {SQL} (pg.south west);
+
+      \begin{scope}[on background layer]
+        \node[fit=(api)(worker), inner sep=0.45cm, rounded corners=7pt,
+              draw=blue!45, line width=0.9pt, dashed, fill=blue!5] (micro) {};
+        \node[dbpmicro, anchor=south] at ([yshift=2pt]micro.north) {$\geq$2 mikrousługi aplikacyjne};
+      \end{scope}
+    \end{tikzpicture}%
+    }
+
+    \column{0.41\textwidth}
+    \vspace{-0.15em}
+    \footnotesize
+    \begin{block}{api --- \texttt{cmd/api}}
+      CRUD, interfejs Superkit, zdarzenia SSE (outbox)
+    \end{block}
+    \vspace{-0.45em}
+    \begin{block}{worker --- \texttt{cmd/worker}}
+      Salda, monitoring budżetów, przypomnienia
+    \end{block}
+    \vspace{-0.45em}
+    \begin{alertblock}{Wymaganie db+}
+      \raggedright
+      Dwie usługi + HTTP (\texttt{WORKER\_URL}) + \texttt{X-Worker-Token}
+    \end{alertblock}
+  \end{columns}
 \end{frame}
 
 \section{Ocena bdb}

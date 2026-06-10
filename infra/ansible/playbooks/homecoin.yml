@@ -7,6 +7,9 @@
   connection: local
   gather_facts: false
 
+  vars_files:
+    - ../group_vars/all/terraform.yml
+
   vars:
     resource_group: "{{ lookup('env', 'AZURE_RESOURCE_GROUP') }}"
     api_app: "{{ container_app_name | default('homecoin-api') }}"

@@ -50,6 +50,18 @@ sleep 45
 echo "==> Terraform init"
 terraform -chdir="$TF_DIR" init -input=false
 
+TF_VARS=(
+  -var="app_name=$APP_NAME"
+  -var="resource_group_name=$RG"
+  -var="location=$LOCATION"
+  -var="deploy_apps=true"
+  -var="image_tag=$TAG"
+  -var="min_replicas=$MIN_REPLICAS"
+  -var="max_replicas=$MAX_REPLICAS"
+  -var="acr_username=$ACR_USER"
+  -var="acr_password=$ACR_PASS"
+)
+
 import_container_app_if_needed() {
   local tf_addr="$1"
   local app_name="$2"
@@ -64,23 +76,14 @@ import_container_app_if_needed() {
     return 0
   fi
   echo "==> Importing existing Container App $app_name into Terraform state"
-  terraform -chdir="$TF_DIR" import -input=false "$tf_addr" "$app_id"
+  terraform -chdir="$TF_DIR" import -input=false "${TF_VARS[@]}" "$tf_addr" "$app_id"
 }
 
 import_container_app_if_needed "azurerm_container_app.worker[0]" "${APP_NAME}-worker"
 import_container_app_if_needed "azurerm_container_app.api[0]" "${APP_NAME}-api"
 
 echo "==> Terraform apply (Container Apps, image_tag=$TAG)"
-terraform -chdir="$TF_DIR" apply -auto-approve -input=false \
-  -var="app_name=$APP_NAME" \
-  -var="resource_group_name=$RG" \
-  -var="location=$LOCATION" \
-  -var="deploy_apps=true" \
-  -var="image_tag=$TAG" \
-  -var="min_replicas=$MIN_REPLICAS" \
-  -var="max_replicas=$MAX_REPLICAS" \
-  -var="acr_username=$ACR_USER" \
-  -var="acr_password=$ACR_PASS"
+terraform -chdir="$TF_DIR" apply -auto-approve -input=false "${TF_VARS[@]}"
 
 terraform -chdir="$TF_DIR" output -json > "$OUTPUTS"
 echo "==> Terraform outputs written to $OUTPUTS"

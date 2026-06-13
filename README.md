@@ -2,6 +2,10 @@
 
 Household finance app — expense splitting, budgets, piggy banks, AI suggestions, and real-time SSE.
 
+**Projekt zaliczeniowy (ocena docelowa: bdb):** [Mapowanie kryteriów oceny](docs/OCENA.md) — spełnienie wymagań od **dst** do **bdb** (CRUD, Azure CI/CD, HTTPS, Docker Compose, mikrousługi, testy jednostkowe i E2E). Wdrożenie na Azure: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+**Repozytorium:** [https://github.com/PatrykGodlewski/homecoin](https://github.com/PatrykGodlewski/homecoin)
+
 The **web UI** is built with [Superkit](https://github.com/anthdm/superkit) (Go + [Templ](https://templ.guide/) + HTMX). The REST API remains at `/api/v1` for mobile clients and integrations.
 
 **For AI agents:** see [AGENTS.md](AGENTS.md) (repo index) and [.cursor/skills/homecoin/SKILL.md](.cursor/skills/homecoin/SKILL.md) (development workflows).
@@ -17,7 +21,7 @@ The **web UI** is built with [Superkit](https://github.com/anthdm/superkit) (Go 
 
 ## Quick Start (Docker — recommended)
 
-Runs PostgreSQL + API together. Migrations apply automatically on startup.
+Runs PostgreSQL, API, Worker, and Nginx (HTTPS) together. Migrations apply automatically on startup.
 
 ```bash
 cd homecoin
@@ -26,21 +30,25 @@ cd homecoin
 cp .env.example .env
 # Add OPENAI_API_KEY=sk-... if you want AI budgeting
 
-# 2. Start everything
+# 2. TLS certs for local Nginx (self-signed)
+chmod +x deploy/docker/nginx/generate-certs.sh
+./deploy/docker/nginx/generate-certs.sh
+
+# 3. Start everything
 docker compose up --build
 
-# Web UI:  http://localhost:8081
-# REST API: http://localhost:8081/api/v1
+# Web UI:  https://localhost:8081
+# REST API: https://localhost:8081/api/v1
 ```
 
 Verify:
 
 ```bash
-curl http://localhost:8081/health
+curl -k https://localhost:8081/health
 # {"status":"ok"}
 ```
 
-Open **http://localhost:8081** in a browser, register, create a household, and use the dashboard.
+Open **https://localhost:8081** in a browser (accept the self-signed certificate warning), register, create a household, and use the dashboard.
 
 Stop:
 
@@ -105,9 +113,11 @@ make templ
 
 ### 4. Smoke test
 
+Requires the Docker stack running (see Quick Start). Uses HTTPS on port 8081 by default.
+
 ```bash
 chmod +x scripts/ci/smoke_test.sh
-./scripts/ci/smoke_test.sh
+BASE_URL=https://127.0.0.1:8081 ./scripts/ci/smoke_test.sh
 ```
 
 ---
